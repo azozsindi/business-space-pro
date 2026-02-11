@@ -10,7 +10,7 @@ import {
   ChevronLeft, ChevronRight, LayoutGrid, Calendar as CalendarIcon, 
   Users, Bell, Search, Plus, Paperclip, LogOut, ShieldAlert, Lock,
   CheckCircle, Clock, FileText, Info, AlertTriangle, TrendingUp, Building2, Download, Image as ImageIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon, ChevronDown
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -23,8 +23,11 @@ const App: React.FC = () => {
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // لتمكين عزوز من التبديل بين المساحات
+  const [activeSpaceId, setActiveSpaceId] = useState<string>('');
+  
   const [settings, setSettings] = useState<SystemSettings>({
-    primaryColor: '#4f46e5', // Indigo-600 default
+    primaryColor: '#4f46e5',
     brandName: 'Business Space Pro',
     allowUserSignup: false
   });
@@ -33,7 +36,11 @@ const App: React.FC = () => {
     const savedData = localStorage.getItem('bs_calendar_data');
     if (savedData) setAllCalendarData(JSON.parse(savedData));
     const savedSession = localStorage.getItem('bs_session');
-    if (savedSession) setUser(JSON.parse(savedSession));
+    if (savedSession) {
+      const u = JSON.parse(savedSession);
+      setUser(u);
+      setActiveSpaceId(u.spaceId);
+    }
     const savedNotifs = localStorage.getItem('bs_notifications');
     if (savedNotifs) setNotifications(JSON.parse(savedNotifs));
     const savedSpaces = localStorage.getItem('bs_spaces');
@@ -48,13 +55,13 @@ const App: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem('bs_settings', JSON.stringify(settings));
-    // Apply dynamic theme color
     document.documentElement.style.setProperty('--primary-color', settings.primaryColor);
   }, [settings]);
 
   const stats = useMemo(() => {
     if (!user) return { totalTasks: 0, completedTasks: 0, mediaCount: 0, daysActive: 0 };
-    const spaceData = allCalendarData[user.spaceId] || {};
+    const targetId = activeSpaceId || user.spaceId;
+    const spaceData = allCalendarData[targetId] || {};
     let total = 0, completed = 0, media = 0;
     Object.values(spaceData).forEach(day => {
       total += day.tasks.length;
@@ -62,10 +69,11 @@ const App: React.FC = () => {
       media += day.media.length;
     });
     return { totalTasks: total, completedTasks: completed, mediaCount: media, daysActive: Object.keys(spaceData).length };
-  }, [allCalendarData, user]);
+  }, [allCalendarData, user, activeSpaceId]);
 
   const handleLogin = (loggedUser: User) => {
     setUser(loggedUser);
+    setActiveSpaceId(loggedUser.spaceId);
     localStorage.setItem('bs_session', JSON.stringify(loggedUser));
   };
 
@@ -87,8 +95,8 @@ const App: React.FC = () => {
 
   const getDayData = (date: Date): DayData => {
     const id = date.toISOString().split('T')[0];
-    const spaceId = user?.spaceId || 'default';
-    return (allCalendarData[spaceId] && allCalendarData[spaceId][id]) || { id, spaceId, notes: '', tasks: [], media: [] };
+    const targetId = activeSpaceId || user?.spaceId || 'default';
+    return (allCalendarData[targetId] && allCalendarData[targetId][id]) || { id, spaceId: targetId, notes: '', tasks: [], media: [] };
   };
 
   const addNotification = (message: string) => {
@@ -96,7 +104,7 @@ const App: React.FC = () => {
       id: Date.now().toString(),
       message,
       user: user?.fullName,
-      spaceId: user?.spaceId,
+      spaceId: activeSpaceId || user?.spaceId,
       time: new Date().toLocaleTimeString('ar-SA'),
       date: new Date().toLocaleDateString('ar-SA')
     };
@@ -108,7 +116,7 @@ const App: React.FC = () => {
   if (!user) return <Login onLogin={handleLogin} settings={settings} />;
 
   const isSuperAdmin = user.role === 'super-admin';
-  const currentSpaceName = spaces.find(s => s.id === user.spaceId)?.name || 'مساحة العمل الأساسية';
+  const currentSpaceName = spaces.find(s => s.id === activeSpaceId)?.name || (activeSpaceId === 'master_space' ? 'لوحة التحكم الرئيسية' : 'مساحة العمل');
 
   return (
     <div className="min-h-screen flex bg-[#f8fafc] text-slate-800 overflow-hidden font-['IBM_Plex_Sans_Arabic']">
@@ -181,8 +189,26 @@ const App: React.FC = () => {
               className="bg-slate-100 border-none rounded-[1.5rem] py-4 pr-14 pl-6 w-full text-sm font-bold outline-none focus:ring-4 focus:ring-primary/5 focus:bg-white transition-all shadow-inner text-right"
             />
           </div>
+          
           <div className="flex items-center gap-4">
-             <div className="px-4 py-2 bg-slate-100 rounded-xl text-xs font-black text-slate-500">{currentSpaceName}</div>
+             {isSuperAdmin ? (
+               <div className="relative flex items-center gap-2">
+                 <Building2 size={18} className="text-primary" />
+                 <select 
+                   value={activeSpaceId}
+                   onChange={(e) => setActiveSpaceId(e.target.value)}
+                   className="bg-slate-100 border-none rounded-xl py-2 px-4 pr-10 text-xs font-black text-slate-600 outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer"
+                 >
+                   <option value="master_space">عرض: المساحة الرئيسية</option>
+                   {spaces.map(s => (
+                     <option key={s.id} value={s.id}>عرض: {s.name}</option>
+                   ))}
+                 </select>
+                 <ChevronDown size={14} className="absolute left-3 text-slate-400 pointer-events-none" />
+               </div>
+             ) : (
+               <div className="px-4 py-2 bg-slate-100 rounded-xl text-xs font-black text-slate-500">{currentSpaceName}</div>
+             )}
           </div>
         </header>
 
@@ -192,7 +218,7 @@ const App: React.FC = () => {
               <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
                 <div className="text-right">
                   <h1 className="text-6xl font-black text-slate-900 mb-4 tracking-tighter">{currentDate.toLocaleDateString('ar-SA', { month: 'long', year: 'numeric' })}</h1>
-                  <p className="text-lg text-slate-400 font-bold">إحصائية الشهر: <span className="text-primary">{stats.completedTasks} مكتملة</span> من أصل {stats.totalTasks}</p>
+                  <p className="text-lg text-slate-400 font-bold">إحصائية {currentSpaceName}: <span className="text-primary">{stats.completedTasks} مكتملة</span> من أصل {stats.totalTasks}</p>
                 </div>
                 <div className="flex items-center gap-3 bg-white p-3 rounded-[2.2rem] shadow-2xl shadow-slate-200 border border-slate-100">
                   <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-4 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all"><ChevronRight size={24} /></button>
@@ -231,7 +257,7 @@ const App: React.FC = () => {
             </div>
           ) : view === 'projects' ? (
             <div className="max-w-6xl mx-auto py-8 text-right">
-               <h2 className="text-5xl font-black text-slate-900 mb-12 tracking-tight">تحليل أداء المساحة</h2>
+               <h2 className="text-5xl font-black text-slate-900 mb-12 tracking-tight">تحليل أداء {currentSpaceName}</h2>
                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                   <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-100 flex flex-col items-center text-center">
                     <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center mb-6"><CheckCircle size={40} /></div>
@@ -280,12 +306,12 @@ const App: React.FC = () => {
             <div className="max-w-4xl mx-auto py-8 text-right">
                <h2 className="text-4xl font-black text-slate-900 mb-12">سجل النشاطات الأخير</h2>
                <div className="space-y-6">
-                  {notifications.filter(n => isSuperAdmin || n.spaceId === user.spaceId).length === 0 && (
+                  {notifications.filter(n => isSuperAdmin || n.spaceId === (activeSpaceId || user.spaceId)).length === 0 && (
                     <div className="py-20 text-center bg-white rounded-[2.5rem] border-2 border-dashed border-slate-100 text-slate-300 font-black italic">
                       لا يوجد نشاطات مسجلة حالياً.
                     </div>
                   )}
-                  {notifications.filter(n => isSuperAdmin || n.spaceId === user.spaceId).map(n => (
+                  {notifications.filter(n => isSuperAdmin || n.spaceId === (activeSpaceId || user.spaceId)).map(n => (
                     <div key={n.id} className="bg-white p-8 rounded-[2.2rem] border border-slate-100 shadow-xl flex flex-row-reverse items-center gap-6 group hover:border-primary transition-all">
                        <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-primary transition-all"><Info size={28} /></div>
                        <div className="flex-1">
@@ -309,9 +335,10 @@ const App: React.FC = () => {
           data={getDayData(selectedDate)}
           onClose={() => setSelectedDate(null)}
           onSave={(d) => {
+            const targetId = activeSpaceId || user.spaceId;
             setAllCalendarData(prev => ({
               ...prev,
-              [user.spaceId]: { ...(prev[user.spaceId] || {}), [d.id]: d }
+              [targetId]: { ...(prev[targetId] || {}), [d.id]: d }
             }));
             addNotification(`قام ${user.fullName} بتحديث بيانات يوم ${new Date(d.id).toLocaleDateString('ar-SA')}`);
             setSelectedDate(null);
