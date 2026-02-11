@@ -1,9 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, UserPlus, Trash2, X, CheckCircle2, Circle } from 'lucide-react';
+import { ShieldCheck, UserPlus, Trash2, X, CheckCircle2, Circle, User as UserIcon, Lock, Settings2 } from 'lucide-react';
 import { User, UserPermissions } from '../types';
 
-const UserManagement: React.FC = () => {
+interface UserManagementProps {
+  currentUser: User;
+}
+
+const UserManagement: React.FC<UserManagementProps> = ({ currentUser }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newUsername, setNewUsername] = useState('');
@@ -13,17 +17,24 @@ const UserManagement: React.FC = () => {
     canEdit: true,
     canViewMedia: true,
     canViewTasks: true,
-    canManageUsers: false
+    canManageUsers: false // الموظف العادي لا يدير مستخدمين آخرين
   });
 
   useEffect(() => {
+    // قراءة جميع المستخدمين وتصفية التابعين لنفس المساحة فقط
     const savedUsers = JSON.parse(localStorage.getItem('bs_users') || '[]');
-    setUsers(savedUsers);
-  }, []);
+    const myTeam = savedUsers.filter((u: User) => u.spaceId === currentUser.spaceId && u.id !== currentUser.id);
+    setUsers(myTeam);
+  }, [currentUser]);
 
-  const saveUsers = (updatedUsers: User[]) => {
-    setUsers(updatedUsers);
-    localStorage.setItem('bs_users', JSON.stringify(updatedUsers));
+  const saveUsersToGlobal = (myUpdatedTeam: User[]) => {
+    const savedUsers = JSON.parse(localStorage.getItem('bs_users') || '[]');
+    // الاحتفاظ بمستخدمي المساحات الأخرى كما هم
+    const otherUsers = savedUsers.filter((u: User) => u.spaceId !== currentUser.spaceId || u.id === currentUser.id);
+    const updatedGlobal = [...otherUsers, ...myUpdatedTeam];
+    
+    localStorage.setItem('bs_users', JSON.stringify(updatedGlobal));
+    setUsers(myUpdatedTeam);
   };
 
   const handleAddUser = (e: React.FormEvent) => {
@@ -31,15 +42,16 @@ const UserManagement: React.FC = () => {
     if (!newUsername || !newPassword) return;
 
     const newUser: User = {
-      id: Date.now().toString(),
-      username: newUsername,
+      id: 'usr_' + Math.random().toString(36).substr(2, 9),
+      username: newUsername.toLowerCase().trim(),
       fullName: newFullName || newUsername,
       password: newPassword,
       role: 'user',
+      spaceId: currentUser.spaceId, // يرث نفس معرف المساحة الخاص بالمدير
       permissions: newPerms
     };
 
-    saveUsers([...users, newUser]);
+    saveUsersToGlobal([...users, newUser]);
     resetForm();
   };
 
@@ -51,167 +63,102 @@ const UserManagement: React.FC = () => {
     setShowAddModal(false);
   };
 
-  const toggleUserPermission = (userId: string, key: keyof UserPermissions) => {
-    const updated = users.map(u => {
-      if (u.id === userId) {
-        return { ...u, permissions: { ...u.permissions, [key]: !u.permissions[key] } };
-      }
-      return u;
-    });
-    saveUsers(updated);
-  };
-
   const deleteUser = (id: string) => {
-    if (window.confirm('هل أنت متأكد من حذف هذا المستخدم؟')) {
-      saveUsers(users.filter(u => u.id !== id));
+    if (window.confirm('هل أنت متأكد من سحب صلاحيات وحذف هذا الموظف من فريقك؟')) {
+      saveUsersToGlobal(users.filter(u => u.id !== id));
     }
   };
 
-  const PermissionToggle = ({ active, label, onClick }: { active: boolean, label: string, onClick: () => void }) => (
-    <button 
-      onClick={onClick}
-      className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold transition-all ${active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}
-    >
-      {active ? <CheckCircle2 size={12} /> : <Circle size={12} />}
-      {label}
-    </button>
-  );
-
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-6xl mx-auto py-8 text-right">
+      <div className="flex flex-row-reverse items-center justify-between mb-12">
         <div>
-          <h2 className="text-2xl font-black text-slate-900">نظام إدارة الصلاحيات</h2>
-          <p className="text-slate-500">تحكم بدقة في ما يمكن لكل موظف فعله أو رؤيته.</p>
+          <h2 className="text-4xl font-black text-slate-900 mb-2">إدارة فريق العمل</h2>
+          <p className="text-slate-500 font-bold">بصفتك مديراً للمساحة، يمكنك التحكم في وصول موظفيك.</p>
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg"
-        >
-          <UserPlus size={20} />
-          <span>إضافة موظف جديد</span>
+        <button onClick={() => setShowAddModal(true)} className="flex flex-row-reverse items-center gap-3 px-8 py-4 bg-indigo-600 text-white rounded-[1.8rem] font-black hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200">
+          <UserPlus size={20} /> إضافة موظف جديد
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-        <table className="w-full text-right">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-100">
-              <th className="px-6 py-4 text-sm font-bold text-slate-500">الموظف</th>
-              <th className="px-6 py-4 text-sm font-bold text-slate-500">الصلاحيات الممنوحة</th>
-              <th className="px-6 py-4 text-sm font-bold text-slate-500">الإجراءات</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {/* Admin Row */}
-            <tr className="bg-indigo-50/30">
-              <td className="px-6 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">A</div>
-                  <div>
-                    <div className="font-black text-slate-900">azoos (المدير العام)</div>
-                    <div className="text-xs text-indigo-600 font-bold">وصول كامل للنظام</div>
-                  </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {users.map(user => (
+          <div key={user.id} className="bg-white p-8 rounded-[2.8rem] border border-slate-100 shadow-xl flex flex-col group hover:border-indigo-500 transition-all relative overflow-hidden">
+             <div className="flex flex-row-reverse items-center justify-between mb-6">
+                <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600 font-black text-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                   {user.fullName.charAt(0)}
                 </div>
-              </td>
-              <td className="px-6 py-4">
-                <div className="flex flex-wrap gap-2">
-                  <span className="px-3 py-1 bg-indigo-600 text-white rounded-full text-[10px] font-bold">كل شيء</span>
-                </div>
-              </td>
-              <td className="px-6 py-4 text-slate-400 text-xs italic">أساسي</td>
-            </tr>
+                <button onClick={() => deleteUser(user.id)} className="p-3 text-slate-200 hover:text-red-500 transition-colors">
+                  <Trash2 size={22} />
+                </button>
+             </div>
+             
+             <div className="text-right mb-6">
+                <h4 className="text-xl font-black text-slate-800">{user.fullName}</h4>
+                <p className="text-sm text-slate-400 font-bold">@{user.username}</p>
+             </div>
 
-            {users.map(user => (
-              <tr key={user.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold">
-                      {user.fullName.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="font-bold text-slate-800">{user.fullName}</div>
-                      <div className="text-xs text-slate-400">@{user.username}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex flex-wrap gap-2">
-                    <PermissionToggle label="تعديل" active={user.permissions.canEdit} onClick={() => toggleUserPermission(user.id, 'canEdit')} />
-                    <PermissionToggle label="وسائط" active={user.permissions.canViewMedia} onClick={() => toggleUserPermission(user.id, 'canViewMedia')} />
-                    <PermissionToggle label="مهام" active={user.permissions.canViewTasks} onClick={() => toggleUserPermission(user.id, 'canViewTasks')} />
-                    <PermissionToggle label="إدارة" active={user.permissions.canManageUsers} onClick={() => toggleUserPermission(user.id, 'canManageUsers')} />
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <button onClick={() => deleteUser(user.id)} className="text-slate-300 hover:text-red-500 transition-colors p-2 hover:bg-red-50 rounded-lg">
-                    <Trash2 size={18} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+             <div className="flex flex-wrap gap-2 flex-row-reverse mb-6">
+                {user.permissions.canEdit && <span className="px-3 py-1 bg-emerald-50 text-emerald-600 text-[10px] font-black rounded-full">صلاحية التحرير</span>}
+                {user.permissions.canViewMedia && <span className="px-3 py-1 bg-blue-50 text-blue-600 text-[10px] font-black rounded-full">رؤية الوسائط</span>}
+             </div>
+
+             <div className="pt-6 border-t border-slate-50 mt-auto">
+                <div className="flex flex-row-reverse items-center gap-2 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                   <ShieldCheck size={14} className="text-indigo-400" /> موظف معتمد
+                </div>
+             </div>
+          </div>
+        ))}
+        {users.length === 0 && (
+          <div className="col-span-full py-20 text-center text-slate-300 font-black italic border-4 border-dashed border-slate-50 rounded-[3rem]">
+            فريقك فارغ حالياً، ابدأ بإضافة موظفيك لمشاركتهم العمل.
+          </div>
+        )}
       </div>
 
       {showAddModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8">
-            <h3 className="text-2xl font-black text-slate-900 mb-6">إضافة موظف</h3>
-            
-            <form onSubmit={handleAddUser} className="space-y-4">
-              <input
-                type="text"
-                value={newFullName}
-                onChange={(e) => setNewFullName(e.target.value)}
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="الاسم الكامل"
-                required
-              />
-              <input
-                type="text"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="اسم المستخدم"
-                required
-              />
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="كلمة المرور"
-                required
-              />
-
-              <div className="py-4 border-t border-slate-100 mt-4">
-                <p className="text-sm font-bold text-slate-700 mb-3">الصلاحيات الافتراضية:</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(newPerms).map(([key, val]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setNewPerms(prev => ({ ...prev, [key]: !val }))}
-                      className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-bold transition-all ${val ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-100 text-slate-400'}`}
-                    >
-                      {val ? <CheckCircle2 size={14} /> : <Circle size={14} />}
-                      {key === 'canEdit' ? 'تعديل' : key === 'canViewMedia' ? 'وسائط' : key === 'canViewTasks' ? 'مهام' : 'إدارة'}
-                    </button>
-                  ))}
+        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+           <div className="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl">
+              <div className="flex flex-row-reverse items-center justify-between mb-8">
+                <h3 className="text-2xl font-black text-slate-900">إضافة موظف للفريق</h3>
+                <button onClick={() => setShowAddModal(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-all"><X size={20} /></button>
+              </div>
+              
+              <form onSubmit={handleAddUser} className="space-y-6 text-right">
+                <div>
+                  <label className="text-xs font-black text-slate-400 mb-3 block mr-1 uppercase">اسم الموظف الكامل</label>
+                  <input type="text" value={newFullName} onChange={e => setNewFullName(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 font-bold text-right" placeholder="مثلاً: أحمد فهد" required />
                 </div>
-              </div>
+                
+                <div>
+                  <label className="text-xs font-black text-slate-400 mb-3 block mr-1 uppercase">اسم المستخدم (للدخول)</label>
+                  <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 font-bold text-right" placeholder="ahmed_99" required />
+                </div>
 
-              <div className="pt-4 flex gap-3">
-                <button type="submit" className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all">
-                  إنشاء الحساب
-                </button>
-                <button type="button" onClick={resetForm} className="px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all">
-                  إلغاء
-                </button>
-              </div>
-            </form>
-          </div>
+                <div>
+                  <label className="text-xs font-black text-slate-400 mb-3 block mr-1 uppercase">كلمة السر</label>
+                  <div className="relative">
+                    <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                    <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 font-bold text-right" placeholder="••••••••" required />
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
+                   <p className="text-xs font-black text-slate-400 uppercase mb-2">صلاحيات الموظف</p>
+                   <button type="button" onClick={() => setNewPerms({...newPerms, canEdit: !newPerms.canEdit})} className="w-full flex flex-row-reverse items-center justify-between p-2">
+                      <span className="text-sm font-bold text-slate-700">السماح بإضافة وتعديل المهام</span>
+                      {newPerms.canEdit ? <CheckCircle2 size={20} className="text-indigo-600" /> : <Circle size={20} className="text-slate-300" />}
+                   </button>
+                   <button type="button" onClick={() => setNewPerms({...newPerms, canViewMedia: !newPerms.canViewMedia})} className="w-full flex flex-row-reverse items-center justify-between p-2">
+                      <span className="text-sm font-bold text-slate-700">السماح برؤية المرفقات والملفات</span>
+                      {newPerms.canViewMedia ? <CheckCircle2 size={20} className="text-indigo-600" /> : <Circle size={20} className="text-slate-300" />}
+                   </button>
+                </div>
+
+                <button type="submit" className="w-full py-6 bg-indigo-600 text-white rounded-2xl font-black hover:bg-indigo-700 shadow-2xl shadow-indigo-200 mt-4 transition-all active:scale-95">إنشاء حساب الموظف</button>
+              </form>
+           </div>
         </div>
       )}
     </div>
