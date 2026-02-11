@@ -1,0 +1,9 @@
+
+{
+  "name": "Business Space Pro",
+  "description": "A professional collaborative workspace with AI-powered insights, live media capture, and advanced task tracking.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
