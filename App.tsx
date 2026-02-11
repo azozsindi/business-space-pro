@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { CalendarState, DayData, User, Task, Space, SystemSettings } from './types';
 import DayModal from './components/DayModal';
 import Login from './components/Login';
@@ -10,53 +10,76 @@ import {
   ChevronLeft, ChevronRight, LayoutGrid, Calendar as CalendarIcon, 
   Users, Bell, Search, Plus, Paperclip, LogOut, ShieldAlert, Lock,
   CheckCircle, Clock, FileText, Info, AlertTriangle, TrendingUp, Building2, Download, Image as ImageIcon,
-  Settings as SettingsIcon, ChevronDown
+  Settings as SettingsIcon, ChevronDown, Save
 } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  // --- نظام الحماية من حذف البيانات (Persistence Shield) ---
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('bs_session');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [allCalendarData, setAllCalendarData] = useState<CalendarState>(() => {
+    const saved = localStorage.getItem('bs_calendar_data');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const [spaces, setSpaces] = useState<Space[]>(() => {
+    const saved = localStorage.getItem('bs_spaces');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [settings, setSettings] = useState<SystemSettings>(() => {
+    const saved = localStorage.getItem('bs_settings');
+    return saved ? JSON.parse(saved) : {
+      primaryColor: '#4f46e5',
+      brandName: 'Business Space Pro',
+      allowUserSignup: false
+    };
+  });
+
+  const [notifications, setNotifications] = useState<any[]>(() => {
+    const saved = localStorage.getItem('bs_notifications');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [view, setView] = useState<'calendar' | 'admin' | 'projects' | 'notifications' | 'spaces' | 'settings'>('calendar');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [allCalendarData, setAllCalendarData] = useState<CalendarState>({});
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [spaces, setSpaces] = useState<Space[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // لتمكين عزوز من التبديل بين المساحات
-  const [activeSpaceId, setActiveSpaceId] = useState<string>('');
-  
-  const [settings, setSettings] = useState<SystemSettings>({
-    primaryColor: '#4f46e5',
-    brandName: 'Business Space Pro',
-    allowUserSignup: false
-  });
+  const [activeSpaceId, setActiveSpaceId] = useState<string>(user?.spaceId || 'master_space');
+  const [isSaving, setIsSaving] = useState(false);
 
+  // تحديث مساحة العمل النشطة عند دخول المستخدم
   useEffect(() => {
-    const savedData = localStorage.getItem('bs_calendar_data');
-    if (savedData) setAllCalendarData(JSON.parse(savedData));
-    const savedSession = localStorage.getItem('bs_session');
-    if (savedSession) {
-      const u = JSON.parse(savedSession);
-      setUser(u);
-      setActiveSpaceId(u.spaceId);
+    if (user && activeSpaceId === 'master_space' && user.spaceId !== 'master_space') {
+      setActiveSpaceId(user.spaceId);
     }
-    const savedNotifs = localStorage.getItem('bs_notifications');
-    if (savedNotifs) setNotifications(JSON.parse(savedNotifs));
-    const savedSpaces = localStorage.getItem('bs_spaces');
-    if (savedSpaces) setSpaces(JSON.parse(savedSpaces));
-    const savedSettings = localStorage.getItem('bs_settings');
-    if (savedSettings) setSettings(JSON.parse(savedSettings));
-  }, []);
+  }, [user]);
 
+  // حفظ البيانات فقط عند حدوث تغيير حقيقي (Deep Watch)
+  const firstUpdate = useRef(true);
   useEffect(() => {
+    if (firstUpdate.current) {
+      firstUpdate.current = false;
+      return;
+    }
+    
+    // إظهار مؤشر الحفظ
+    setIsSaving(true);
     localStorage.setItem('bs_calendar_data', JSON.stringify(allCalendarData));
-  }, [allCalendarData]);
+    localStorage.setItem('bs_spaces', JSON.stringify(spaces));
+    localStorage.setItem('bs_settings', JSON.stringify(settings));
+    localStorage.setItem('bs_notifications', JSON.stringify(notifications));
+    
+    const timer = setTimeout(() => setIsSaving(false), 1000);
+    return () => clearTimeout(timer);
+  }, [allCalendarData, spaces, settings, notifications]);
 
   useEffect(() => {
-    localStorage.setItem('bs_settings', JSON.stringify(settings));
     document.documentElement.style.setProperty('--primary-color', settings.primaryColor);
-  }, [settings]);
+  }, [settings.primaryColor]);
 
   const stats = useMemo(() => {
     if (!user) return { totalTasks: 0, completedTasks: 0, mediaCount: 0, daysActive: 0 };
@@ -108,9 +131,7 @@ const App: React.FC = () => {
       time: new Date().toLocaleTimeString('ar-SA'),
       date: new Date().toLocaleDateString('ar-SA')
     };
-    const updated = [newNotif, ...notifications].slice(0, 50);
-    setNotifications(updated);
-    localStorage.setItem('bs_notifications', JSON.stringify(updated));
+    setNotifications(prev => [newNotif, ...prev].slice(0, 50));
   };
 
   if (!user) return <Login onLogin={handleLogin} settings={settings} />;
@@ -127,6 +148,13 @@ const App: React.FC = () => {
         .border-primary { border-color: var(--primary-color); }
         .ring-primary { --tw-ring-color: var(--primary-color); }
       `}</style>
+
+      {/* مؤشر الحفظ التلقائي */}
+      {isSaving && (
+        <div className="fixed bottom-8 left-8 bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-[100] animate-bounce text-xs font-black">
+          <Save size={16} className="text-emerald-400" /> جاري حفظ التغييرات...
+        </div>
+      )}
 
       <aside className="w-80 bg-[#0f172a] flex flex-col p-8 space-y-10 z-10 shadow-2xl text-slate-400">
         <div className="flex items-center gap-4 px-2">
