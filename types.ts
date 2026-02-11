@@ -54,3 +54,9 @@ export interface User {
   password?: string;
   permissions: UserPermissions;
 }
+
+export interface SystemSettings {
+  primaryColor: string;
+  brandName: string;
+  allowUserSignup: boolean;
+}
