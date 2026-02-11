@@ -58,12 +58,14 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
     Array.from(files).forEach(file => {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        const type = file.type.startsWith('image/') ? 'image' : 
-                     file.type.startsWith('video/') ? 'video' : 
-                     file.type.startsWith('audio/') ? 'audio' : 'file';
+        let type: 'image' | 'video' | 'audio' | 'file' = 'file';
+        if (file.type.startsWith('image/')) type = 'image';
+        else if (file.type.startsWith('video/')) type = 'video';
+        else if (file.type.startsWith('audio/')) type = 'audio';
+
         const newMedia: MediaFile = {
           id: 'up-' + Date.now() + Math.random(),
-          type: type as any,
+          type,
           name: file.name,
           url: ev.target?.result as string,
           createdAt: new Date().toISOString()
@@ -72,6 +74,8 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
       };
       reader.readAsDataURL(file);
     });
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const startVoiceRecording = async () => {
@@ -125,7 +129,7 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
           <div className="text-right">
             <h2 className="text-3xl font-black text-slate-800 tracking-tight">{date.toLocaleDateString('ar-SA', { weekday: 'long', day: 'numeric', month: 'long' })}</h2>
             <div className="flex flex-row-reverse items-center gap-2 mt-1">
-              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+              <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Business Space Pro</p>
             </div>
           </div>
@@ -140,13 +144,13 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
                 <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><FileText size={18} /></div> ملاحظات العمل اليومية
               </label>
               <div className="flex gap-2">
-                <button onClick={() => fileInputRef.current?.click()} className="p-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-all" title="رفع ملفات"><Upload size={20} /></button>
+                <button onClick={() => fileInputRef.current?.click()} className="p-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-all" title="رفع أي ملف (PDF, Doc, Image, etc.)"><Upload size={20} /></button>
                 <button onClick={isRecording ? () => mediaRecorderRef.current?.stop() : startVoiceRecording} className={`p-2.5 rounded-xl transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 text-slate-600 hover:bg-slate-900 hover:text-white'}`}>{isRecording ? <StopCircle size={20} /> : <Mic size={20} />}</button>
                 <button onClick={openCamera} className="p-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-all"><Camera size={20} /></button>
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple />
               </div>
             </div>
-            <textarea readOnly={!canEdit} value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full h-44 p-6 rounded-[2rem] bg-slate-50 border border-slate-200 focus:ring-8 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all resize-none text-slate-700 font-bold text-lg leading-relaxed placeholder:text-slate-300 text-right" placeholder="سجل تفاصيل اليوم هنا..." />
+            <textarea readOnly={!canEdit} value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full h-44 p-6 rounded-[2rem] bg-slate-50 border border-slate-200 focus:ring-8 focus:ring-indigo-500/5 focus:border-primary outline-none transition-all resize-none text-slate-700 font-bold text-lg leading-relaxed placeholder:text-slate-300 text-right" placeholder="سجل تفاصيل اليوم هنا..." />
           </section>
 
           <section>
@@ -154,10 +158,11 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
               <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600"><CheckCircle size={18} /></div> قائمة المهام والمتابعة
             </label>
             <div className="space-y-4">
+              {tasks.length === 0 && <p className="text-center py-8 text-slate-300 italic font-bold">لا توجد مهام مسجلة لهذا اليوم</p>}
               {tasks.map(task => (
                 <div key={task.id} className={`flex flex-col p-5 rounded-3xl border transition-all ${task.completed ? 'bg-emerald-50/50 border-emerald-100' : 'bg-white border-slate-100 shadow-sm'}`}>
                   <div className="flex flex-row-reverse items-center gap-4">
-                    <button onClick={() => toggleTask(task.id)} className={`transition-all active:scale-90 ${task.completed ? 'text-emerald-500' : 'text-slate-300 hover:text-indigo-500'}`}>
+                    <button onClick={() => toggleTask(task.id)} className={`transition-all active:scale-90 ${task.completed ? 'text-emerald-500' : 'text-slate-300 hover:text-primary'}`}>
                       {task.completed ? <CheckCircle size={26} fill="currentColor" className="text-emerald-500 bg-white rounded-full" /> : <Square size={26} />}
                     </button>
                     <span className={`flex-1 text-base font-bold text-right ${task.completed ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{task.text}</span>
@@ -172,16 +177,16 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
                 </div>
               ))}
               {canEdit && (
-                <div className="flex flex-row-reverse items-center mt-6 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100 transition-all">
+                <div className="flex flex-row-reverse items-center mt-6 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all">
                   <input type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addTask()} placeholder="اكتب مهمة جديدة..." className="flex-1 p-5 bg-transparent outline-none text-base font-bold text-right" />
-                  <button onClick={addTask} className="p-5 bg-indigo-600 text-white hover:bg-indigo-700 transition-all"><Plus size={28} /></button>
+                  <button onClick={addTask} className="p-5 bg-primary text-white hover:opacity-90 transition-all"><Plus size={28} /></button>
                 </div>
               )}
             </div>
           </section>
 
           <section className="bg-[#1e293b] p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
-            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-indigo-500/20 to-transparent opacity-50"></div>
+            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-primary/20 to-transparent opacity-50"></div>
             <div className="relative z-10">
               <div className="flex flex-row-reverse items-center justify-between mb-6">
                 <div className="flex flex-row-reverse items-center gap-3 font-black text-xl"><Sparkles className="text-yellow-400" /> تحليل الذكاء الاصطناعي (Gemini)</div>
@@ -215,7 +220,7 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
 
         <div className="px-10 py-8 bg-slate-50/80 border-t border-slate-100 flex justify-end gap-4 backdrop-blur-md">
           <button onClick={onClose} className="px-8 py-4 text-sm font-black text-slate-500 hover:bg-slate-200 rounded-2xl transition-all">إلغاء</button>
-          {canEdit && <button onClick={() => onSave({ id: data.id, spaceId: data.spaceId, notes, tasks, media })} className="px-12 py-4 text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-200 transition-all active:scale-95">حفظ التعديلات</button>}
+          {canEdit && <button onClick={() => onSave({ id: data.id, spaceId: data.spaceId, notes, tasks, media })} className="px-12 py-4 text-sm font-black text-white bg-primary hover:opacity-90 rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-95">حفظ التعديلات</button>}
         </div>
       </div>
 
