@@ -1,7 +1,7 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { DayData, Task, MediaFile, User } from '../types';
-import { X, Plus, Check, Square, Paperclip, Sparkles, Loader2, Lock, Mic, Camera, Trash2, StopCircle, Video } from 'lucide-react';
+import { X, Plus, Check, Square, Paperclip, Sparkles, Loader2, Mic, Camera, Trash2, StopCircle, Video, FileText, Upload, CheckCircle } from 'lucide-react';
 import MediaGallery from './MediaGallery';
 import { getDailySummary } from '../services/geminiService';
 
@@ -21,23 +21,18 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [aiInsight, setAiInsight] = useState('');
   
-  // Recording states
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const [showCamera, setShowCamera] = useState(false);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const canEdit = currentUser.role === 'admin' || currentUser.permissions.canEdit;
+
+  const canEdit = currentUser.role === 'admin' || currentUser.role === 'super-admin' || currentUser.permissions.canEdit;
 
   const addTask = () => {
     if (!newTask.trim() || !canEdit) return;
-    setTasks([...tasks, { 
-      id: Date.now().toString(), 
-      text: newTask, 
-      completed: false 
-    }]);
+    setTasks([...tasks, { id: Date.now().toString(), text: newTask, completed: false }]);
     setNewTask('');
   };
 
@@ -57,13 +52,34 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
     }));
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const type = file.type.startsWith('image/') ? 'image' : 
+                     file.type.startsWith('video/') ? 'video' : 
+                     file.type.startsWith('audio/') ? 'audio' : 'file';
+        const newMedia: MediaFile = {
+          id: 'up-' + Date.now() + Math.random(),
+          type: type as any,
+          name: file.name,
+          url: ev.target?.result as string,
+          createdAt: new Date().toISOString()
+        };
+        setMedia(prev => [...prev, newMedia]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   const startVoiceRecording = async () => {
     try {
       const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(audioStream);
       mediaRecorderRef.current = recorder;
       const chunks: Blob[] = [];
-
       recorder.ondataavailable = (e) => chunks.push(e.data);
       recorder.onstop = () => {
         const blob = new Blob(chunks, { type: 'audio/webm' });
@@ -72,7 +88,7 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
           const newMedia: MediaFile = {
             id: 'v-' + Date.now(),
             type: 'audio',
-            name: `ملاحظة صوتية - ${new Date().toLocaleTimeString('ar-SA')}`,
+            name: `تسجيل صوتي - ${new Date().toLocaleTimeString('ar-SA')}`,
             url: e.target?.result as string,
             createdAt: new Date().toISOString()
           };
@@ -81,36 +97,9 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
         reader.readAsDataURL(blob);
         audioStream.getTracks().forEach(t => t.stop());
       };
-
       recorder.start();
       setIsRecording(true);
-    } catch (err) {
-      alert("يرجى منح صلاحية الميكروفون");
-    }
-  };
-
-  const stopVoiceRecording = () => {
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
-  };
-
-  const capturePhoto = async () => {
-    if (!videoPreviewRef.current) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = videoPreviewRef.current.videoWidth;
-    canvas.height = videoPreviewRef.current.videoHeight;
-    canvas.getContext('2d')?.drawImage(videoPreviewRef.current, 0, 0);
-    const dataUrl = canvas.toDataURL('image/jpeg');
-    
-    const newMedia: MediaFile = {
-      id: 'p-' + Date.now(),
-      type: 'image',
-      name: `لقطة حية - ${new Date().toLocaleTimeString('ar-SA')}`,
-      url: dataUrl,
-      createdAt: new Date().toISOString()
-    };
-    setMedia(prev => [...prev, newMedia]);
-    closeCamera();
+    } catch (err) { alert("يرجى منح صلاحية الميكروفون"); }
   };
 
   const openCamera = async () => {
@@ -118,12 +107,8 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
       const s = await navigator.mediaDevices.getUserMedia({ video: true });
       setStream(s);
       setShowCamera(true);
-      setTimeout(() => {
-        if (videoPreviewRef.current) videoPreviewRef.current.srcObject = s;
-      }, 100);
-    } catch (err) {
-      alert("يرجى منح صلاحية الكاميرا");
-    }
+      setTimeout(() => { if (videoPreviewRef.current) videoPreviewRef.current.srcObject = s; }, 100);
+    } catch (err) { alert("يرجى منح صلاحية الكاميرا"); }
   };
 
   const closeCamera = () => {
@@ -132,181 +117,136 @@ const DayModal: React.FC<DayModalProps> = ({ date, data, onClose, onSave, curren
     setShowCamera(false);
   };
 
-  const handleAiSummary = async () => {
-    setIsSummarizing(true);
-    const summary = await getDailySummary({ id: data.id, notes, tasks, media });
-    setAiInsight(summary || '');
-    setIsSummarizing(false);
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md">
-      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] border border-white/20">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+      <div className="bg-white w-full max-w-3xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-white/20">
         
-        {/* Header */}
-        <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div>
-            <h2 className="text-2xl font-black text-slate-800">{date.toLocaleDateString('ar-SA', { weekday: 'long', day: 'numeric', month: 'long' })}</h2>
-            <p className="text-xs text-slate-500 font-bold mt-1">مساحة عمل: <span className="text-indigo-600">Business Space</span></p>
+        <div className="px-10 py-8 border-b border-slate-100 flex flex-row-reverse items-center justify-between bg-slate-50/50">
+          <div className="text-right">
+            <h2 className="text-3xl font-black text-slate-800 tracking-tight">{date.toLocaleDateString('ar-SA', { weekday: 'long', day: 'numeric', month: 'long' })}</h2>
+            <div className="flex flex-row-reverse items-center gap-2 mt-1">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+              <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Business Space Pro</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-3 hover:bg-white hover:shadow-md rounded-2xl transition-all"><X size={24} className="text-slate-400" /></button>
+          <button onClick={onClose} className="p-3 hover:bg-white hover:shadow-xl rounded-2xl transition-all border border-transparent hover:border-slate-100"><X size={24} className="text-slate-400" /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 space-y-10">
+        <div className="flex-1 overflow-y-auto p-10 space-y-12 custom-scrollbar text-right">
           
-          {/* Notes Section */}
           <section>
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-sm font-black text-slate-700 flex items-center gap-2">
-                <FileText className="text-indigo-500" size={18} /> ملاحظات الفريق
+            <div className="flex flex-row-reverse items-center justify-between mb-6">
+              <label className="text-sm font-black text-slate-800 flex flex-row-reverse items-center gap-3">
+                <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><FileText size={18} /></div> ملاحظات العمل اليومية
               </label>
               <div className="flex gap-2">
-                <button 
-                  onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
-                  className={`p-2 rounded-xl transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                  title="تسجيل صوتي"
-                >
-                  {isRecording ? <StopCircle size={20} /> : <Mic size={20} />}
-                </button>
-                <button 
-                  onClick={openCamera}
-                  className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-all"
-                  title="تصوير حي"
-                >
-                  <Camera size={20} />
-                </button>
+                <button onClick={() => fileInputRef.current?.click()} className="p-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-all" title="رفع ملفات"><Upload size={20} /></button>
+                <button onClick={isRecording ? () => mediaRecorderRef.current?.stop() : startVoiceRecording} className={`p-2.5 rounded-xl transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-100 text-slate-600 hover:bg-slate-900 hover:text-white'}`}>{isRecording ? <StopCircle size={20} /> : <Mic size={20} />}</button>
+                <button onClick={openCamera} className="p-2.5 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-900 hover:text-white transition-all"><Camera size={20} /></button>
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple />
               </div>
             </div>
-            
-            <textarea
-              readOnly={!canEdit}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full h-40 p-5 rounded-[1.5rem] bg-slate-50 border border-slate-200 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all resize-none text-slate-700 font-medium"
-              placeholder="سجل ملاحظات العمل هنا..."
-            />
+            <textarea readOnly={!canEdit} value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full h-44 p-6 rounded-[2rem] bg-slate-50 border border-slate-200 focus:ring-8 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all resize-none text-slate-700 font-bold text-lg leading-relaxed placeholder:text-slate-300 text-right" placeholder="سجل تفاصيل اليوم هنا..." />
           </section>
 
-          {/* Tasks Section */}
           <section>
-            <label className="text-sm font-black text-slate-700 mb-4 block">المهام اليومية</label>
-            <div className="space-y-3">
+            <label className="text-sm font-black text-slate-800 mb-6 flex flex-row-reverse items-center gap-3">
+              <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600"><CheckCircle size={18} /></div> قائمة المهام والمتابعة
+            </label>
+            <div className="space-y-4">
               {tasks.map(task => (
-                <div 
-                  key={task.id} 
-                  className={`flex flex-col p-4 rounded-2xl border transition-all ${task.completed ? 'bg-emerald-50 border-emerald-100 shadow-sm' : 'bg-white border-rose-100'}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <button 
-                      onClick={() => toggleTask(task.id)} 
-                      className={`transition-transform active:scale-90 ${task.completed ? 'text-emerald-600' : 'text-rose-400'}`}
-                    >
-                      {task.completed ? <CheckCircle size={24} strokeWidth={3} /> : <Square size={24} />}
+                <div key={task.id} className={`flex flex-col p-5 rounded-3xl border transition-all ${task.completed ? 'bg-emerald-50/50 border-emerald-100' : 'bg-white border-slate-100 shadow-sm'}`}>
+                  <div className="flex flex-row-reverse items-center gap-4">
+                    <button onClick={() => toggleTask(task.id)} className={`transition-all active:scale-90 ${task.completed ? 'text-emerald-500' : 'text-slate-300 hover:text-indigo-500'}`}>
+                      {task.completed ? <CheckCircle size={26} fill="currentColor" className="text-emerald-500 bg-white rounded-full" /> : <Square size={26} />}
                     </button>
-                    <span className={`flex-1 text-sm font-bold ${task.completed ? 'text-emerald-800 line-through' : 'text-slate-800'}`}>
-                      {task.text}
-                    </span>
-                    {canEdit && (
-                      <button onClick={() => setTasks(tasks.filter(t => t.id !== task.id))} className="text-slate-300 hover:text-red-500">
-                        <Trash2 size={16} />
-                      </button>
-                    )}
+                    <span className={`flex-1 text-base font-bold text-right ${task.completed ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{task.text}</span>
+                    {canEdit && <button onClick={() => setTasks(tasks.filter(t => t.id !== task.id))} className="text-slate-200 hover:text-red-500 transition-colors p-2"><Trash2 size={18} /></button>}
                   </div>
                   {task.completed && (
-                    <div className="mt-2 mr-9 text-[10px] font-black text-emerald-600 uppercase flex items-center gap-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      تم الإنجاز بواسطة: {task.completedBy}
+                    <div className="mt-3 ml-10 flex flex-row-reverse items-center justify-between text-[10px] font-black text-emerald-600/70 bg-white/50 p-2 rounded-xl border border-emerald-100/50">
+                      <span>أنجزها: {task.completedBy}</span>
+                      <span>{new Date(task.completedAt!).toLocaleTimeString('ar-SA')}</span>
                     </div>
                   )}
                 </div>
               ))}
-              
               {canEdit && (
-                <div className="flex items-center mt-6 bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 group focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100 transition-all">
-                  <input
-                    type="text"
-                    value={newTask}
-                    onChange={(e) => setNewTask(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && addTask()}
-                    placeholder="إضافة مهمة جديدة لفريقك..."
-                    className="flex-1 p-4 bg-transparent outline-none text-sm font-bold"
-                  />
-                  <button onClick={addTask} className="p-4 bg-indigo-600 text-white hover:bg-indigo-700 transition-all"><Plus size={24} /></button>
+                <div className="flex flex-row-reverse items-center mt-6 bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-100 transition-all">
+                  <input type="text" value={newTask} onChange={(e) => setNewTask(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addTask()} placeholder="اكتب مهمة جديدة..." className="flex-1 p-5 bg-transparent outline-none text-base font-bold text-right" />
+                  <button onClick={addTask} className="p-5 bg-indigo-600 text-white hover:bg-indigo-700 transition-all"><Plus size={28} /></button>
                 </div>
               )}
             </div>
           </section>
 
-          {/* AI Section */}
-          <section className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-[2rem] text-white shadow-xl shadow-indigo-100 overflow-hidden relative">
-            <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-              <Sparkles size={200} className="absolute -top-10 -left-10" />
-            </div>
-            
-            <div className="flex items-center justify-between mb-4 relative z-10">
-              <div className="flex items-center gap-2 font-black text-lg">
-                <Sparkles size={22} className="text-yellow-300" /> رؤية ذكية (AI)
+          <section className="bg-[#1e293b] p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-indigo-500/20 to-transparent opacity-50"></div>
+            <div className="relative z-10">
+              <div className="flex flex-row-reverse items-center justify-between mb-6">
+                <div className="flex flex-row-reverse items-center gap-3 font-black text-xl"><Sparkles className="text-yellow-400" /> تحليل الذكاء الاصطناعي (Gemini)</div>
+                <button 
+                  onClick={async () => { 
+                    setIsSummarizing(true); 
+                    const s = await getDailySummary({id: data.id, spaceId: data.spaceId, notes, tasks, media}); 
+                    setAiInsight(s || ''); 
+                    setIsSummarizing(false); 
+                  }} 
+                  disabled={isSummarizing} 
+                  className="px-6 py-2.5 bg-white text-slate-900 rounded-xl text-xs font-black transition-all hover:scale-105 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSummarizing ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />} تحديث التحليل
+                </button>
               </div>
-              <button
-                onClick={handleAiSummary}
-                disabled={isSummarizing}
-                className="px-5 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-xl text-xs font-black transition-all flex items-center gap-2 disabled:opacity-50"
-              >
-                {isSummarizing ? <Loader2 className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                تحديث التحليل
-              </button>
-            </div>
-            
-            {aiInsight ? (
-              <div className="text-sm font-medium leading-relaxed bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/10 relative z-10">
-                {aiInsight}
+              <div className="text-sm font-medium leading-relaxed bg-white/5 border border-white/10 p-6 rounded-2xl min-h-[100px] flex items-center justify-center italic text-slate-300 text-right">
+                {aiInsight || "اضغط على زر التحديث للحصول على تحليل ذكي لأداء اليوم"}
               </div>
-            ) : (
-              <p className="text-xs text-white/60 font-bold text-center py-4 italic">اضغط على زر التحديث للحصول على رؤية ذكية لأداء هذا اليوم</p>
-            )}
+            </div>
           </section>
 
-          {/* Media Section */}
           <section>
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-sm font-black text-slate-700 flex items-center gap-2">
-                <Paperclip className="text-indigo-500" size={18} /> المعرض والمرفقات
-              </label>
-            </div>
+             <label className="text-sm font-black text-slate-800 mb-6 flex flex-row-reverse items-center gap-3">
+              <div className="p-2 bg-amber-50 rounded-lg text-amber-600"><Paperclip size={18} /></div> المرفقات والملفات ({media.length})
+            </label>
             <MediaGallery media={media} onRemove={(id) => canEdit && setMedia(media.filter(m => m.id !== id))} />
           </section>
 
         </div>
 
-        {/* Footer */}
-        <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-4">
-          <button onClick={onClose} className="px-6 py-3 text-sm font-black text-slate-500 hover:bg-slate-200 rounded-2xl transition-all">إلغاء</button>
-          {canEdit && <button onClick={() => onSave({ id: data.id, notes, tasks, media })} className="px-10 py-3 text-sm font-black text-white bg-slate-900 hover:bg-black rounded-2xl shadow-xl transition-all active:scale-95">حفظ وتعميم التغييرات</button>}
+        <div className="px-10 py-8 bg-slate-50/80 border-t border-slate-100 flex justify-end gap-4 backdrop-blur-md">
+          <button onClick={onClose} className="px-8 py-4 text-sm font-black text-slate-500 hover:bg-slate-200 rounded-2xl transition-all">إلغاء</button>
+          {canEdit && <button onClick={() => onSave({ id: data.id, spaceId: data.spaceId, notes, tasks, media })} className="px-12 py-4 text-sm font-black text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-xl shadow-indigo-200 transition-all active:scale-95">حفظ التعديلات</button>}
         </div>
       </div>
 
-      {/* Camera Overlay */}
       {showCamera && (
-        <div className="fixed inset-0 z-[60] bg-black/90 flex flex-col items-center justify-center p-6 backdrop-blur-xl">
-          <div className="relative w-full max-w-lg aspect-video rounded-3xl overflow-hidden border-4 border-white/20 bg-slate-900">
+        <div className="fixed inset-0 z-[60] bg-black/95 flex flex-col items-center justify-center p-6 backdrop-blur-3xl">
+          <div className="relative w-full max-w-2xl aspect-video rounded-[3rem] overflow-hidden border-8 border-white/10 shadow-2xl">
             <video ref={videoPreviewRef} autoPlay playsInline className="w-full h-full object-cover" />
-            <div className="absolute top-4 right-4 flex gap-2">
-               <button onClick={closeCamera} className="p-3 bg-white/10 hover:bg-red-500 rounded-full text-white backdrop-blur-md transition-all"><X size={20} /></button>
-            </div>
+            <button onClick={closeCamera} className="absolute top-6 right-6 p-4 bg-white/10 hover:bg-red-500 rounded-2xl text-white backdrop-blur-md transition-all"><X size={24} /></button>
           </div>
-          <div className="mt-8 flex gap-6">
-            <button onClick={capturePhoto} className="w-20 h-20 bg-white rounded-full border-8 border-white/20 flex items-center justify-center text-slate-900 shadow-2xl active:scale-90 transition-all">
-              <Camera size={32} />
-            </button>
-          </div>
-          <p className="mt-4 text-white/60 font-bold text-sm">اضغط على الكاميرا لالتقاط لقطة فورية</p>
+          <button onClick={() => {
+            if (!videoPreviewRef.current) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = videoPreviewRef.current.videoWidth;
+            canvas.height = videoPreviewRef.current.videoHeight;
+            canvas.getContext('2d')?.drawImage(videoPreviewRef.current, 0, 0);
+            const newMedia: MediaFile = {
+              id: 'p-' + Date.now(),
+              type: 'image',
+              name: `لقطة - ${new Date().toLocaleTimeString('ar-SA')}`,
+              url: canvas.toDataURL('image/jpeg'),
+              createdAt: new Date().toISOString()
+            };
+            setMedia(prev => [...prev, newMedia]);
+            closeCamera();
+          }} className="mt-12 w-24 h-24 bg-white rounded-full border-[12px] border-white/20 flex items-center justify-center text-slate-900 shadow-2xl active:scale-90 transition-all group">
+            <Camera size={38} className="group-hover:rotate-12 transition-transform" />
+          </button>
         </div>
       )}
     </div>
   );
 };
-
-const FileText = ({ className, size }: { className?: string, size?: number }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>;
-const CheckCircle = ({ className, size, strokeWidth }: { className?: string, size?: number, strokeWidth?: number }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
 
 export default DayModal;
