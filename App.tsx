@@ -6,11 +6,12 @@ import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import SpaceManagement from './components/SpaceManagement';
 import Settings from './components/Settings';
+import ProfileSettings from './components/ProfileSettings';
 import { 
   ChevronLeft, ChevronRight, LayoutGrid, Calendar as CalendarIcon, 
   Users, Bell, Search, Plus, Paperclip, LogOut, ShieldAlert, Lock,
   CheckCircle, Clock, FileText, Info, AlertTriangle, TrendingUp, Building2, Download, Image as ImageIcon,
-  Settings as SettingsIcon, ChevronDown, Save
+  Settings as SettingsIcon, ChevronDown, Save, UserCog
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -44,7 +45,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [view, setView] = useState<'calendar' | 'admin' | 'projects' | 'notifications' | 'spaces' | 'settings'>('calendar');
+  const [view, setView] = useState<'calendar' | 'admin' | 'projects' | 'notifications' | 'spaces' | 'settings' | 'profile'>('calendar');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,7 +67,6 @@ const App: React.FC = () => {
       return;
     }
     
-    // إظهار مؤشر الحفظ
     setIsSaving(true);
     localStorage.setItem('bs_calendar_data', JSON.stringify(allCalendarData));
     localStorage.setItem('bs_spaces', JSON.stringify(spaces));
@@ -104,6 +104,20 @@ const App: React.FC = () => {
     setUser(null);
     localStorage.removeItem('bs_session');
     setView('calendar');
+  };
+
+  const handleUserUpdate = (updatedUser: User) => {
+    setUser(updatedUser);
+    localStorage.setItem('bs_session', JSON.stringify(updatedUser));
+    
+    // تحديث في قائمة المستخدمين الكلية
+    const savedUsers = JSON.parse(localStorage.getItem('bs_users') || '[]');
+    const updatedUsers = savedUsers.map((u: User) => u.id === updatedUser.id ? updatedUser : u);
+    localStorage.setItem('bs_users', JSON.stringify(updatedUsers));
+    
+    addNotification(`قام ${updatedUser.fullName} بتحديث بيانات حسابه الشخصي`);
+    setIsSaving(true);
+    setTimeout(() => setIsSaving(false), 800);
   };
 
   const daysInMonth = useMemo(() => {
@@ -149,7 +163,6 @@ const App: React.FC = () => {
         .ring-primary { --tw-ring-color: var(--primary-color); }
       `}</style>
 
-      {/* مؤشر الحفظ التلقائي */}
       {isSaving && (
         <div className="fixed bottom-8 left-8 bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-[100] animate-bounce text-xs font-black">
           <Save size={16} className="text-emerald-400" /> جاري حفظ التغييرات...
@@ -177,6 +190,13 @@ const App: React.FC = () => {
           <button onClick={() => setView('notifications')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'notifications' ? 'bg-primary text-white shadow-xl shadow-indigo-600/40' : 'hover:bg-slate-800 hover:text-white'}`}>
             <Bell size={20} /> سجل النشاطات
           </button>
+          
+          <div className="pt-4 pb-2 text-[10px] font-black text-slate-600 uppercase tracking-widest px-6">الإدارة</div>
+          
+          <button onClick={() => setView('profile')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'profile' ? 'bg-primary text-white shadow-xl shadow-indigo-600/40' : 'hover:bg-slate-800 hover:text-white'}`}>
+            <UserCog size={20} /> ملفي الشخصي
+          </button>
+
           {(user.permissions.canManageUsers || isSuperAdmin) && (
             <button onClick={() => setView('admin')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'admin' ? 'bg-primary text-white shadow-xl shadow-indigo-600/40' : 'hover:bg-slate-800 hover:text-white'}`}>
               <Users size={20} /> {isSuperAdmin ? 'إدارة الكل' : 'إدارة الفريق'}
@@ -308,24 +328,9 @@ const App: React.FC = () => {
                     <p className="text-sm font-bold text-slate-400 mt-2 uppercase">أيام نشطة</p>
                   </div>
                </div>
-               <div className="mt-12 bg-[#0f172a] p-12 rounded-[3.5rem] text-white shadow-2xl relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-1/2 h-full bg-primary/10 blur-[100px]"></div>
-                  <div className="relative z-10">
-                    <h3 className="text-3xl font-black mb-4">معدل الإنجاز الكلي</h3>
-                    <div className="flex items-center gap-8 flex-row-reverse">
-                       <div className="flex-1 h-6 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
-                          <div 
-                            className="h-full bg-primary shadow-[0_0_20px_rgba(99,102,241,0.5)] transition-all duration-1000" 
-                            style={{width: `${stats.totalTasks ? (stats.completedTasks/stats.totalTasks)*100 : 0}%`}}
-                          ></div>
-                       </div>
-                       <span className="text-5xl font-black text-primary">
-                         {stats.totalTasks ? Math.round((stats.completedTasks/stats.totalTasks)*100) : 0}%
-                       </span>
-                    </div>
-                  </div>
-               </div>
             </div>
+          ) : view === 'profile' ? (
+            <ProfileSettings user={user} onUpdate={handleUserUpdate} />
           ) : view === 'admin' ? (
             <UserManagement currentUser={user} isSuperAdmin={isSuperAdmin} />
           ) : view === 'settings' && isSuperAdmin ? (
