@@ -231,7 +231,9 @@ const App: React.FC = () => {
     return (
       <div className={`mb-10 p-8 rounded-[2.5rem] border-2 border-dashed transition-all hover:border-primary/30 flex items-start gap-6 ${lang === 'ar' ? 'flex-row-reverse text-right' : 'text-left'} ${darkMode ? 'bg-slate-800/40 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
         <div className={`w-14 h-14 ${instr.color} text-white rounded-2xl flex items-center justify-center shrink-0 shadow-lg animate-bounce-slow`}>
-          <Info size={28} />
+          <div className="flex items-center justify-center">
+            <Info size={28} />
+          </div>
         </div>
         <div className="flex-1">
           <h3 className={`text-xl font-black mb-3 ${darkMode ? 'text-white' : 'text-slate-800'}`}>{instr.title}</h3>
@@ -433,13 +435,24 @@ const App: React.FC = () => {
               users={users} 
             />
           ) : view === 'profile' ? (
-            <ProfileSettings user={user} onUpdate={() => {}} />
+            <ProfileSettings 
+              user={user} 
+              onUpdate={(updatedUser: User) => {
+                // تحديث حالة المستخدم الحالية
+                setUser(updatedUser);
+                // تحديث قائمة المستخدمين الكلية
+                const updatedUsersList = users.map(u => u.id === updatedUser.id ? updatedUser : u);
+                setUsers(updatedUsersList);
+                // حفظ البيانات في LocalStorage لضمان بقائها
+                localStorage.setItem('bs_session', JSON.stringify(updatedUser));
+                localStorage.setItem('bs_users_data', JSON.stringify(updatedUsersList));
+              }} 
+            />
           ) : view === 'admin' ? (
             <UserManagement currentUser={user} isSuperAdmin={isSuperAdmin} />
           ) : view === 'settings' && isSuperAdmin ? (
             <Settings settings={settings} onUpdate={setSettings} onSpacesUpdate={setSpaces} />
           ) : view === 'notifications' ? (
-            /* تفعيل مكون سجل النشاطات هنا */
             <ActivityLog 
               calendarState={allCalendarData} 
               spaces={spaces} 
