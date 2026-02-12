@@ -1,8 +1,9 @@
-
-import React from 'react';
+import React, { useState } from 'react';
 import { SystemSettings, Space } from '../types';
-import SpaceManagement from './SpaceManagement';
-import { Palette, Building2, Layout, Sliders, Check, ShieldCheck } from 'lucide-react';
+import { 
+  Settings as SettingsIcon, Palette, Building2, 
+  Save, Plus, Trash2, CheckCircle2, Layout 
+} from 'lucide-react';
 
 interface SettingsProps {
   settings: SystemSettings;
@@ -11,112 +12,138 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ settings, onUpdate, onSpacesUpdate }) => {
-  const [activeTab, setActiveTab] = React.useState<'general' | 'spaces'>('general');
+  const [spaces, setSpaces] = useState<Space[]>(() => {
+    const saved = localStorage.getItem('bs_spaces');
+    return saved ? JSON.parse(saved) : [];
+  });
 
-  const colorPresets = [
-    { name: 'Business Blue', color: '#4f46e5' },
-    { name: 'Executive Purple', color: '#9333ea' },
-    { name: 'Emerald Success', color: '#059669' },
-    { name: 'Midnight Executive', color: '#0f172a' },
-    { name: 'Sunset Sales', color: '#e11d48' },
-    { name: 'Deep Gold', color: '#b45309' },
-  ];
+  const [newSpaceName, setNewSpaceName] = useState('');
+  const [newSpaceColor, setNewSpaceColor] = useState('#4f46e5');
+
+  const saveSettings = (newSettings: SystemSettings) => {
+    onUpdate(newSettings);
+    localStorage.setItem('bs_settings', JSON.stringify(newSettings));
+  };
+
+  const addSpace = () => {
+    if (!newSpaceName) return;
+    const newSpace: Space = {
+      id: Date.now().toString(),
+      name: newSpaceName,
+      primaryColor: newSpaceColor,
+      managerId: '',
+      createdAt: new Date().toISOString()
+    };
+    const updatedSpaces = [...spaces, newSpace];
+    setSpaces(updatedSpaces);
+    onSpacesUpdate(updatedSpaces);
+    localStorage.setItem('bs_spaces', JSON.stringify(updatedSpaces));
+    setNewSpaceName('');
+  };
+
+  const removeSpace = (id: string) => {
+    const updatedSpaces = spaces.filter(s => s.id !== id);
+    setSpaces(updatedSpaces);
+    onSpacesUpdate(updatedSpaces);
+    localStorage.setItem('bs_spaces', JSON.stringify(updatedSpaces));
+  };
 
   return (
-    <div className="max-w-6xl mx-auto py-8 text-right">
-      <div className="flex flex-row-reverse items-center justify-between mb-12">
-        <div>
-          <h2 className="text-5xl font-black text-slate-900 mb-2">لوحة التحكم العليا</h2>
-          <p className="text-slate-500 font-bold">مرحباً عزوز، هنا يمكنك التحكم في هوية وبيئة النظام بالكامل.</p>
+    <div className="max-w-5xl mx-auto space-y-12 pb-20 text-right" dir="rtl">
+      {/* قسم هوية النظام */}
+      <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-100">
+        <div className="flex items-center gap-4 mb-10 flex-row-reverse">
+          <div className="w-12 h-12 bg-indigo-50 text-primary rounded-2xl flex items-center justify-center">
+            <Layout size={24} />
+          </div>
+          <h3 className="text-2xl font-black text-slate-800">تخصيص هوية النظام</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <div className="space-y-4">
+            <label className="text-sm font-black text-slate-500 block mr-2">اسم المنصة (Brand Name)</label>
+            <input 
+              type="text"
+              value={settings.brandName}
+              onChange={(e) => saveSettings({...settings, brandName: e.target.value})}
+              className="w-full bg-slate-50 border-none rounded-2xl py-4 px-6 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-primary transition-all"
+            />
+          </div>
+
+          <div className="space-y-4">
+            <label className="text-sm font-black text-slate-500 block mr-2">اللون الرئيسي للنظام</label>
+            <div className="flex gap-4">
+              <input 
+                type="color"
+                value={settings.primaryColor}
+                onChange={(e) => saveSettings({...settings, primaryColor: e.target.value})}
+                className="w-20 h-14 rounded-xl cursor-pointer border-none bg-transparent"
+              />
+              <input 
+                type="text"
+                value={settings.primaryColor}
+                onChange={(e) => saveSettings({...settings, primaryColor: e.target.value})}
+                className="flex-1 bg-slate-50 border-none rounded-2xl py-4 px-6 font-mono font-bold text-slate-700 text-center outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-row-reverse gap-8">
-        {/* Navigation Sidebar */}
-        <div className="w-64 space-y-2">
+      {/* قسم إدارة مساحات العمل */}
+      <div className="bg-white p-10 rounded-[3rem] shadow-xl border border-slate-100">
+        <div className="flex items-center gap-4 mb-10 flex-row-reverse">
+          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+            <Building2 size={24} />
+          </div>
+          <h3 className="text-2xl font-black text-slate-800">إدارة مساحات العمل (Spaces)</h3>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-4 mb-10">
+          <input 
+            type="text"
+            placeholder="اسم المساحة (مثلاً: القسم الهندسي)"
+            value={newSpaceName}
+            onChange={(e) => setNewSpaceName(e.target.value)}
+            className="flex-1 bg-slate-50 border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary"
+          />
+          <input 
+            type="color"
+            value={newSpaceColor}
+            onChange={(e) => setNewSpaceColor(e.target.value)}
+            className="w-20 h-14 rounded-xl cursor-pointer"
+          />
           <button 
-            onClick={() => setActiveTab('general')}
-            className={`w-full flex flex-row-reverse items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${activeTab === 'general' ? 'bg-primary text-white shadow-xl' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
+            onClick={addSpace}
+            className="bg-primary text-white px-8 py-4 rounded-2xl font-black flex items-center gap-2 hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-indigo-200"
           >
-            <Palette size={20} /> المظهر العام
-          </button>
-          <button 
-            onClick={() => setActiveTab('spaces')}
-            className={`w-full flex flex-row-reverse items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${activeTab === 'spaces' ? 'bg-primary text-white shadow-xl' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-          >
-            <Building2 size={20} /> الفروع والمساحات
+            <Plus size={20} /> إضافة مساحة
           </button>
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 bg-white rounded-[3rem] p-12 shadow-2xl border border-slate-100">
-          {activeTab === 'general' ? (
-            <div className="space-y-12">
-              <section>
-                <div className="flex flex-row-reverse items-center gap-4 mb-8">
-                   <div className="p-3 bg-primary/10 text-primary rounded-2xl"><Palette size={24} /></div>
-                   <h3 className="text-2xl font-black text-slate-800">تخصيص الهوية البصرية</h3>
-                </div>
-                
-                <p className="text-sm font-bold text-slate-400 mb-6">اختر اللون الأساسي الذي سيعبر عن علامتك التجارية في جميع أنحاء التطبيق.</p>
-                
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                  {colorPresets.map((preset) => (
-                    <button
-                      key={preset.color}
-                      onClick={() => onUpdate({ ...settings, primaryColor: preset.color })}
-                      className={`relative flex flex-row-reverse items-center gap-4 p-6 rounded-[2rem] border-2 transition-all ${settings.primaryColor === preset.color ? 'border-primary bg-primary/5' : 'border-slate-100 hover:border-slate-200'}`}
-                    >
-                      <div className="w-10 h-10 rounded-full shadow-lg" style={{ backgroundColor: preset.color }} />
-                      <span className="text-sm font-black text-slate-700">{preset.name}</span>
-                      {settings.primaryColor === preset.color && <div className="absolute top-4 left-4 text-primary"><Check size={16} /></div>}
-                    </button>
-                  ))}
-                  
-                  <div className="flex flex-row-reverse items-center gap-4 p-6 rounded-[2rem] border-2 border-dashed border-slate-200 group">
-                    <input 
-                      type="color" 
-                      value={settings.primaryColor}
-                      onChange={(e) => onUpdate({ ...settings, primaryColor: e.target.value })}
-                      className="w-10 h-10 rounded-full cursor-pointer bg-transparent"
-                    />
-                    <span className="text-sm font-black text-slate-400">لون مخصص</span>
-                  </div>
-                </div>
-              </section>
-
-              <section className="pt-12 border-t border-slate-50">
-                 <div className="flex flex-row-reverse items-center gap-4 mb-8">
-                   <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl"><ShieldCheck size={24} /></div>
-                   <h3 className="text-2xl font-black text-slate-800">إعدادات النظام</h3>
-                </div>
-                
-                <div className="space-y-6">
-                  <div>
-                    <label className="text-xs font-black text-slate-400 mb-3 block mr-1 uppercase">اسم المنصة الرسمي</label>
-                    <input 
-                      type="text" 
-                      value={settings.brandName}
-                      onChange={(e) => onUpdate({ ...settings, brandName: e.target.value })}
-                      className="w-full max-w-md p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-primary/5 focus:border-primary font-bold text-right" 
-                      placeholder="اسم النظام..." 
-                    />
-                  </div>
-                  
-                  <div className="flex flex-row-reverse items-center justify-between p-6 bg-slate-50 rounded-[2rem] border border-slate-100 max-w-md">
-                     <span className="text-sm font-black text-slate-700">تفعيل التسجيل المفتوح للمستخدمين</span>
-                     <button 
-                       onClick={() => onUpdate({ ...settings, allowUserSignup: !settings.allowUserSignup })}
-                       className={`w-14 h-8 rounded-full transition-all relative ${settings.allowUserSignup ? 'bg-primary' : 'bg-slate-200'}`}
-                     >
-                        <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${settings.allowUserSignup ? 'left-1' : 'right-1'}`} />
-                     </button>
-                  </div>
-                </div>
-              </section>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {spaces.map(space => (
+            <div key={space.id} className="group relative bg-slate-50 p-6 rounded-[2.2rem] border-2 border-transparent hover:border-slate-200 transition-all">
+              <div className="flex items-center justify-between flex-row-reverse mb-4">
+                <div 
+                  className="w-10 h-10 rounded-xl shadow-lg" 
+                  style={{ backgroundColor: space.primaryColor }}
+                />
+                <button 
+                  onClick={() => removeSpace(space.id)}
+                  className="p-2 text-slate-300 hover:text-rose-500 transition-colors"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+              <h4 className="text-lg font-black text-slate-800 mb-1">{space.name}</h4>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">مساحة عمل مخصصة</p>
             </div>
-          ) : (
-            <SpaceManagement onSpacesUpdate={onSpacesUpdate} />
+          ))}
+          {spaces.length === 0 && (
+            <div className="col-span-full py-10 text-center text-slate-300 font-bold italic border-2 border-dashed rounded-[2.2rem]">
+              لا يوجد مساحات عمل مضافة حالياً
+            </div>
           )}
         </div>
       </div>
