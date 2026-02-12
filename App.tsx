@@ -8,6 +8,8 @@ import Settings from './components/Settings';
 import ProfileSettings from './components/ProfileSettings';
 // استيراد مكون الإحصائيات الجديد
 import Stats from './components/Stats'; 
+// استيراد مكون سجل النشاطات الجديد
+import ActivityLog from './components/ActivityLog';
 
 import { 
   ChevronLeft, ChevronRight, LayoutGrid, Calendar as CalendarIcon, 
@@ -229,7 +231,7 @@ const App: React.FC = () => {
     return (
       <div className={`mb-10 p-8 rounded-[2.5rem] border-2 border-dashed transition-all hover:border-primary/30 flex items-start gap-6 ${lang === 'ar' ? 'flex-row-reverse text-right' : 'text-left'} ${darkMode ? 'bg-slate-800/40 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
         <div className={`w-14 h-14 ${instr.color} text-white rounded-2xl flex items-center justify-center shrink-0 shadow-lg animate-bounce-slow`}>
-          <info size={28} />
+          <Info size={28} />
         </div>
         <div className="flex-1">
           <h3 className={`text-xl font-black mb-3 ${darkMode ? 'text-white' : 'text-slate-800'}`}>{instr.title}</h3>
@@ -436,6 +438,13 @@ const App: React.FC = () => {
             <UserManagement currentUser={user} isSuperAdmin={isSuperAdmin} />
           ) : view === 'settings' && isSuperAdmin ? (
             <Settings settings={settings} onUpdate={setSettings} onSpacesUpdate={setSpaces} />
+          ) : view === 'notifications' ? (
+            /* تفعيل مكون سجل النشاطات هنا */
+            <ActivityLog 
+              calendarState={allCalendarData} 
+              spaces={spaces} 
+              users={users} 
+            />
           ) : (
             <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
                <h2 className={`text-4xl font-black mb-12 ${darkMode ? 'text-white' : 'text-slate-900'}`}>{t.activity}</h2>
