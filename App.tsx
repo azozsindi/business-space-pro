@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { CalendarState, DayData, User, Task, Space, SystemSettings } from './types';
 import DayModal from './components/DayModal';
@@ -9,9 +8,9 @@ import Settings from './components/Settings';
 import ProfileSettings from './components/ProfileSettings';
 import { 
   ChevronLeft, ChevronRight, LayoutGrid, Calendar as CalendarIcon, 
-  Users, Bell, Search, Plus, Paperclip, LogOut, ShieldAlert, Lock,
+  Users, Bell, Search, Plus, Paperclip, LogOut, ShieldCheck, Lock,
   CheckCircle, Clock, FileText, Info, AlertTriangle, TrendingUp, Building2, Download, Image as ImageIcon,
-  Settings as SettingsIcon, ChevronDown, Save, UserCog
+  Settings as SettingsIcon, ChevronDown, Save, UserCog, Palette
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -45,6 +44,12 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // التحكم في الرتب
+  const isSuperAdmin = user?.role === 'super-admin';
+  const isAdmin = user?.role === 'admin';
+  const isManager = user?.role === 'manager';
+  const isEmployee = user?.role === 'employee';
+
   const [view, setView] = useState<'calendar' | 'admin' | 'projects' | 'notifications' | 'spaces' | 'settings' | 'profile'>('calendar');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -54,12 +59,12 @@ const App: React.FC = () => {
 
   // تحديث مساحة العمل النشطة عند دخول المستخدم
   useEffect(() => {
-    if (user && activeSpaceId === 'master_space' && user.spaceId !== 'master_space') {
+    if (user && activeSpaceId === 'master_space' && user.spaceId !== 'master_space' && !isSuperAdmin) {
       setActiveSpaceId(user.spaceId);
     }
   }, [user]);
 
-  // حفظ البيانات فقط عند حدوث تغيير حقيقي (Deep Watch)
+  // حفظ البيانات التلقائي (Deep Watch)
   const firstUpdate = useRef(true);
   useEffect(() => {
     if (firstUpdate.current) {
@@ -77,9 +82,12 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [allCalendarData, spaces, settings, notifications]);
 
+  // تطبيق الألوان ديناميكياً
+  const currentSpace = useMemo(() => spaces.find(s => s.id === activeSpaceId), [spaces, activeSpaceId]);
   useEffect(() => {
-    document.documentElement.style.setProperty('--primary-color', settings.primaryColor);
-  }, [settings.primaryColor]);
+    const themeColor = currentSpace?.primaryColor || settings.primaryColor;
+    document.documentElement.style.setProperty('--primary-color', themeColor);
+  }, [currentSpace, settings.primaryColor]);
 
   const stats = useMemo(() => {
     if (!user) return { totalTasks: 0, completedTasks: 0, mediaCount: 0, daysActive: 0 };
@@ -89,7 +97,7 @@ const App: React.FC = () => {
     Object.values(spaceData).forEach(day => {
       total += day.tasks.length;
       completed += day.tasks.filter(t => t.completed).length;
-      media += day.media.length;
+      if (day.media) media += day.media.length;
     });
     return { totalTasks: total, completedTasks: completed, mediaCount: media, daysActive: Object.keys(spaceData).length };
   }, [allCalendarData, user, activeSpaceId]);
@@ -109,15 +117,10 @@ const App: React.FC = () => {
   const handleUserUpdate = (updatedUser: User) => {
     setUser(updatedUser);
     localStorage.setItem('bs_session', JSON.stringify(updatedUser));
-    
-    // تحديث في قائمة المستخدمين الكلية
     const savedUsers = JSON.parse(localStorage.getItem('bs_users') || '[]');
     const updatedUsers = savedUsers.map((u: User) => u.id === updatedUser.id ? updatedUser : u);
     localStorage.setItem('bs_users', JSON.stringify(updatedUsers));
-    
     addNotification(`قام ${updatedUser.fullName} بتحديث بيانات حسابه الشخصي`);
-    setIsSaving(true);
-    setTimeout(() => setIsSaving(false), 800);
   };
 
   const daysInMonth = useMemo(() => {
@@ -150,43 +153,47 @@ const App: React.FC = () => {
 
   if (!user) return <Login onLogin={handleLogin} settings={settings} />;
 
-  const isSuperAdmin = user.role === 'super-admin';
-  const currentSpaceName = spaces.find(s => s.id === activeSpaceId)?.name || (activeSpaceId === 'master_space' ? 'لوحة التحكم الرئيسية' : 'مساحة العمل');
+  const currentSpaceName = currentSpace?.name || (activeSpaceId === 'master_space' ? 'لوحة التحكم الرئيسية' : 'مساحة العمل');
 
   return (
-    <div className="min-h-screen flex bg-[#f8fafc] text-slate-800 overflow-hidden font-['IBM_Plex_Sans_Arabic']">
+    <div className="min-h-screen flex bg-[#f8fafc] text-slate-800 overflow-hidden font-['IBM_Plex_Sans_Arabic']" dir="rtl">
       <style>{`
-        :root { --primary-color: ${settings.primaryColor}; }
+        :root { --primary-color: ${currentSpace?.primaryColor || settings.primaryColor}; }
         .bg-primary { background-color: var(--primary-color); }
         .text-primary { color: var(--primary-color); }
         .border-primary { border-color: var(--primary-color); }
-        .ring-primary { --tw-ring-color: var(--primary-color); }
       `}</style>
 
+      {/* مؤشر الحفظ */}
       {isSaving && (
-        <div className="fixed bottom-8 left-8 bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-[100] animate-bounce text-xs font-black">
-          <Save size={16} className="text-emerald-400" /> جاري حفظ التغييرات...
+        <div className="fixed bottom-8 left-8 bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-[100] text-xs font-black animate-pulse">
+          <ShieldCheck size={16} className="text-emerald-400" /> تم تأمين الحفظ
         </div>
       )}
 
+      {/* القائمة الجانبية */}
       <aside className="w-80 bg-[#0f172a] flex flex-col p-8 space-y-10 z-10 shadow-2xl text-slate-400">
         <div className="flex items-center gap-4 px-2">
-          <div className="w-14 h-14 bg-primary rounded-[1.8rem] flex items-center justify-center text-white shadow-2xl">
+          <div className="w-14 h-14 bg-primary rounded-[1.8rem] flex items-center justify-center text-white shadow-2xl transition-colors duration-500">
             <LayoutGrid size={32} />
           </div>
-          <div>
-            <span className="text-2xl font-black text-white leading-tight block">Business</span>
+          <div className="text-right">
+            <span className="text-2xl font-black text-white leading-tight block">{settings.brandName.split(' ')[0]}</span>
             <span className="text-xs font-bold text-primary uppercase tracking-widest">Space Pro</span>
           </div>
         </div>
 
-        <nav className="space-y-3 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+        <nav className="space-y-3 flex-1 overflow-y-auto custom-scrollbar text-right">
           <button onClick={() => setView('calendar')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'calendar' ? 'bg-primary text-white shadow-xl shadow-indigo-600/40' : 'hover:bg-slate-800 hover:text-white'}`}>
             <CalendarIcon size={20} /> التقويم التفاعلي
           </button>
-          <button onClick={() => setView('projects')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'projects' ? 'bg-primary text-white shadow-xl shadow-indigo-600/40' : 'hover:bg-slate-800 hover:text-white'}`}>
-            <TrendingUp size={20} /> إحصائيات الأداء
-          </button>
+          
+          {(isSuperAdmin || isManager) && (
+            <button onClick={() => setView('projects')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'projects' ? 'bg-primary text-white shadow-xl shadow-indigo-600/40' : 'hover:bg-slate-800 hover:text-white'}`}>
+              <TrendingUp size={20} /> إحصائيات الإنجاز
+            </button>
+          )}
+
           <button onClick={() => setView('notifications')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'notifications' ? 'bg-primary text-white shadow-xl shadow-indigo-600/40' : 'hover:bg-slate-800 hover:text-white'}`}>
             <Bell size={20} /> سجل النشاطات
           </button>
@@ -197,21 +204,22 @@ const App: React.FC = () => {
             <UserCog size={20} /> ملفي الشخصي
           </button>
 
-          {(user.permissions.canManageUsers || isSuperAdmin) && (
+          {(isSuperAdmin || isAdmin || isManager) && (
             <button onClick={() => setView('admin')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'admin' ? 'bg-primary text-white shadow-xl shadow-indigo-600/40' : 'hover:bg-slate-800 hover:text-white'}`}>
               <Users size={20} /> {isSuperAdmin ? 'إدارة الكل' : 'إدارة الفريق'}
             </button>
           )}
+
           {isSuperAdmin && (
             <button onClick={() => setView('settings')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'settings' ? 'bg-primary text-white shadow-xl shadow-indigo-600/40' : 'hover:bg-slate-800 hover:text-white'}`}>
-              <SettingsIcon size={20} /> الإعدادات العامة
+              <Palette size={20} /> تخصيص النظام
             </button>
           )}
         </nav>
 
         <div className="pt-6 border-t border-slate-800">
            <div className="bg-slate-800/50 rounded-[2rem] p-6 border border-slate-700/50">
-              <div className="flex items-center gap-4 mb-5">
+              <div className="flex items-center gap-4 mb-5 flex-row-reverse">
                 <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${user.username}`} className="w-12 h-12 rounded-2xl bg-indigo-500/10" alt="avatar" />
                 <div className="flex-1 min-w-0 text-right">
                   <p className="text-sm font-black text-white truncate">{user.fullName}</p>
@@ -225,8 +233,8 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        <header className="h-24 bg-white/70 backdrop-blur-xl border-b border-slate-200 flex items-center justify-between px-12 sticky top-0 z-20">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden relative text-right">
+        <header className="h-24 bg-white/70 backdrop-blur-xl border-b border-slate-200 flex items-center justify-between px-12 sticky top-0 z-20 flex-row-reverse">
           <div className="relative w-96 group">
             <Search className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors" size={20} />
             <input 
@@ -240,19 +248,16 @@ const App: React.FC = () => {
           
           <div className="flex items-center gap-4">
              {isSuperAdmin ? (
-               <div className="relative flex items-center gap-2">
+               <div className="relative flex items-center gap-2 flex-row-reverse">
                  <Building2 size={18} className="text-primary" />
                  <select 
                    value={activeSpaceId}
                    onChange={(e) => setActiveSpaceId(e.target.value)}
-                   className="bg-slate-100 border-none rounded-xl py-2 px-4 pr-10 text-xs font-black text-slate-600 outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer"
+                   className="bg-slate-100 border-none rounded-xl py-2 px-8 text-xs font-black text-slate-600 outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer text-right"
                  >
-                   <option value="master_space">عرض: المساحة الرئيسية</option>
-                   {spaces.map(s => (
-                     <option key={s.id} value={s.id}>عرض: {s.name}</option>
-                   ))}
+                   <option value="master_space">عرض: لوحة التحكم</option>
+                   {spaces.map(s => <option key={s.id} value={s.id}>عرض: {s.name}</option>)}
                  </select>
-                 <ChevronDown size={14} className="absolute left-3 text-slate-400 pointer-events-none" />
                </div>
              ) : (
                <div className="px-4 py-2 bg-slate-100 rounded-xl text-xs font-black text-slate-500">{currentSpaceName}</div>
@@ -263,20 +268,20 @@ const App: React.FC = () => {
         <div className="flex-1 p-12 overflow-y-auto custom-scrollbar">
           {view === 'calendar' ? (
             <div className="max-w-7xl mx-auto">
-              <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16 flex-row-reverse">
                 <div className="text-right">
                   <h1 className="text-6xl font-black text-slate-900 mb-4 tracking-tighter">{currentDate.toLocaleDateString('ar-SA', { month: 'long', year: 'numeric' })}</h1>
                   <p className="text-lg text-slate-400 font-bold">إحصائية {currentSpaceName}: <span className="text-primary">{stats.completedTasks} مكتملة</span> من أصل {stats.totalTasks}</p>
                 </div>
                 <div className="flex items-center gap-3 bg-white p-3 rounded-[2.2rem] shadow-2xl shadow-slate-200 border border-slate-100">
-                  <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-4 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all"><ChevronRight size={24} /></button>
+                  <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-4 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all"><ChevronRight size={24} /></button>
                   <button onClick={() => setCurrentDate(new Date())} className="px-10 py-3 text-sm font-black text-slate-900 hover:bg-slate-100 rounded-2xl transition-all">اليوم</button>
-                  <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-4 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all"><ChevronLeft size={24} /></button>
+                  <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-4 hover:bg-slate-50 rounded-2xl text-slate-600 transition-all"><ChevronLeft size={24} /></button>
                 </div>
               </div>
 
               <div className="grid grid-cols-7 gap-6">
-                {['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'].map(day => (
+                {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => (
                   <div key={day} className="pb-6 text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">{day}</div>
                 ))}
                 
@@ -293,9 +298,9 @@ const App: React.FC = () => {
                         ${isMatch ? 'ring-4 ring-yellow-400 border-yellow-400 scale-105 z-20 shadow-2xl' : 'border-slate-50 hover:border-primary/50 hover:-translate-y-2 hover:shadow-2xl'}`}
                     >
                       <span className="text-3xl font-black mb-auto text-slate-200 group-hover:text-slate-900 transition-colors">{date.getDate()}</span>
-                      <div className="flex flex-wrap gap-1.5 mt-4">
+                      <div className="flex flex-wrap gap-1.5 mt-4 justify-end">
                         {data.tasks.length > 0 && <div className={`w-2 h-2 rounded-full ${data.tasks.every(t => t.completed) ? 'bg-emerald-500' : 'bg-rose-500'}`} />}
-                        {data.media.length > 0 && <div className="w-2 h-2 rounded-full bg-primary" />}
+                        {data.media && data.media.length > 0 && <div className="w-2 h-2 rounded-full bg-primary" />}
                         {data.notes.length > 10 && <div className="w-2 h-2 rounded-full bg-amber-500" />}
                       </div>
                     </button>
@@ -345,7 +350,7 @@ const App: React.FC = () => {
                     </div>
                   )}
                   {notifications.filter(n => isSuperAdmin || n.spaceId === (activeSpaceId || user.spaceId)).map(n => (
-                    <div key={n.id} className="bg-white p-8 rounded-[2.2rem] border border-slate-100 shadow-xl flex flex-row-reverse items-center gap-6 group hover:border-primary transition-all">
+                    <div key={n.id} className="bg-white p-8 rounded-[2.2rem] border border-slate-100 shadow-xl flex flex-row-reverse items-center gap-6 group hover:border-primary transition-all text-right">
                        <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-primary transition-all"><Info size={28} /></div>
                        <div className="flex-1">
                           <p className="text-lg font-bold text-slate-800">{n.message}</p>
