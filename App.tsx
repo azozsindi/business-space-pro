@@ -51,6 +51,46 @@ const translations = {
   }
 };
 
+// --- نظام التعليمات حسب الصلاحيات ---
+const roleInstructions: Record<string, { title: string, steps: string[], color: string }> = {
+  'super-admin': {
+    title: "صلاحيات السوبر أدمن (التحكم المطلق)",
+    steps: [
+      "يمكنك مراقبة كافة مساحات العمل وتعديل إعداداتها البرمجية.",
+      "لديك الصلاحية لتحديد عدد المستخدمين الأقصى لكل مساحة عمل.",
+      "يمكنك إضافة مدراء نظام (Admins) وتعيينهم في أي مساحة."
+    ],
+    color: "bg-rose-500"
+  },
+  'admin': {
+    title: "إرشادات مدير النظام",
+    steps: [
+      "قم بإدارة فرق العمل والتأكد من توزيع المهام بشكل صحيح.",
+      "يمكنك مراجعة تقارير الإنجاز لكافة الموظفين في النظام.",
+      "لديك صلاحية الوصول لإعدادات المظهر العامة."
+    ],
+    color: "bg-amber-500"
+  },
+  'manager': {
+    title: "دليل مدير المساحة",
+    steps: [
+      "أنت المسؤول عن إضافة وحذف أعضاء فريقك ضمن السعة المحددة لك.",
+      "تابع مهام موظفيك اليومية وقم بتقييم الأداء من قسم الإحصائيات.",
+      "يمكنك تخصيص لون المساحة الخاص بك لتمييزها عن البقية."
+    ],
+    color: "bg-indigo-500"
+  },
+  'employee': {
+    title: "دليل العمل اليومي للموظف",
+    steps: [
+      "اضغط على اليوم الحالي لإضافة مهامك اليومية وملاحظاتك.",
+      "قم برفع المرفقات والصور لتوثيق إنجازاتك بشكل مرئي.",
+      "تأكد من وضع علامة (مكتمل) عند انتهاء أي مهمة لتظهر في التقارير."
+    ],
+    color: "bg-emerald-500"
+  }
+};
+
 const App: React.FC = () => {
   // --- حالات النظام (اللغة والوضع الداكن) ---
   const [lang, setLang] = useState<'ar' | 'en'>(() => (localStorage.getItem('bs_lang') as 'ar' | 'en') || 'ar');
@@ -180,6 +220,30 @@ const App: React.FC = () => {
     return (allCalendarData[targetId] && allCalendarData[targetId][id]) || { id, spaceId: targetId, notes: '', tasks: [], media: [] };
   };
 
+  // --- مكون صندوق التعليمات ---
+  const InstructionBox = () => {
+    if (!user) return null;
+    const instr = roleInstructions[user.role] || roleInstructions['employee'];
+    return (
+      <div className={`mb-10 p-8 rounded-[2.5rem] border-2 border-dashed transition-all hover:border-primary/30 flex items-start gap-6 ${lang === 'ar' ? 'flex-row-reverse text-right' : 'text-left'} ${darkMode ? 'bg-slate-800/40 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
+        <div className={`w-14 h-14 ${instr.color} text-white rounded-2xl flex items-center justify-center shrink-0 shadow-lg animate-bounce-slow`}>
+          <Info size={28} />
+        </div>
+        <div className="flex-1">
+          <h3 className={`text-xl font-black mb-3 ${darkMode ? 'text-white' : 'text-slate-800'}`}>{instr.title}</h3>
+          <ul className="space-y-2">
+            {instr.steps.map((step, i) => (
+              <li key={i} className={`text-sm font-bold flex items-center gap-3 ${lang === 'ar' ? 'flex-row-reverse' : ''} ${darkMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${instr.color}`} />
+                {step}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
+  };
+
   if (!user) return <Login onLogin={handleLogin} settings={settings} />;
 
   const currentSpaceName = currentSpace?.name || (activeSpaceId === 'master_space' ? t.mainSpace : "Space");
@@ -191,6 +255,11 @@ const App: React.FC = () => {
         .bg-primary { background-color: var(--primary-color); }
         .text-primary { color: var(--primary-color); }
         .border-primary { border-color: var(--primary-color); }
+        @keyframes bounce-slow {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
+        .animate-bounce-slow { animation: bounce-slow 3s infinite ease-in-out; }
       `}</style>
 
       {isSaving && (
@@ -305,6 +374,9 @@ const App: React.FC = () => {
         <div className={`flex-1 p-12 overflow-y-auto custom-scrollbar transition-colors duration-500 ${darkMode ? 'bg-[#0f172a]' : 'bg-[#f8fafc]'}`}>
           {view === 'calendar' ? (
             <div className="max-w-7xl mx-auto">
+              {/* إضافة صندوق التعليمات هنا */}
+              <InstructionBox />
+
               <div className={`flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16 ${lang === 'ar' ? 'md:flex-row-reverse' : ''}`}>
                 <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
                   <h1 className={`text-6xl font-black mb-4 tracking-tighter ${darkMode ? 'text-white' : 'text-slate-900'}`}>
@@ -355,9 +427,7 @@ const App: React.FC = () => {
             </div>
           ) : view === 'projects' ? (
             <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
-               {/* محتوى الإحصائيات هنا */}
                <h2 className={`text-5xl font-black mb-12 tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>{t.stats}</h2>
-               {/* نفس شبكة الإحصائيات السابقة مع إضافة كلاسات darkMode للخلفية */}
             </div>
           ) : view === 'profile' ? (
             <ProfileSettings user={user} onUpdate={() => {}} />
@@ -368,7 +438,6 @@ const App: React.FC = () => {
           ) : (
             <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
                <h2 className={`text-4xl font-black mb-12 ${darkMode ? 'text-white' : 'text-slate-900'}`}>{t.activity}</h2>
-               {/* كود النشاطات */}
             </div>
           )}
         </div>
