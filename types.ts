@@ -1,25 +1,11 @@
+// types.ts
+
 export type UserRole = 'super-admin' | 'admin' | 'manager' | 'employee';
 
-export interface Permissions {
-  // صلاحيات المستخدمين
-  canCreateUser: boolean;
-  canEditUser: boolean;
-  canDeleteUser: boolean;
-  canChangeRoles: boolean;
-  
-  // صلاحيات المساحات
-  canCreateSpace: boolean;
-  canEditSpace: boolean;
-  canDeleteSpace: boolean;
-  
-  // صلاحيات المحتوى
-  canEditOthersTasks: boolean;
-  canDeleteOthersTasks: boolean;
-  canViewAllSpaces: boolean;
-  
-  // صلاحيات النظام
-  canAccessSettings: boolean;
-  canExportData: boolean;
+export interface UserPermissions {
+  canManageUsers: boolean;
+  canCreateSpaces: boolean;
+  canViewAllReports: boolean;
 }
 
 export interface User {
@@ -28,7 +14,43 @@ export interface User {
   fullName: string;
   role: UserRole;
   spaceId: string;
-  permissions: Permissions; // الصلاحيات المفصلة هنا
+  permissions: UserPermissions;
+  avatar?: string;
+  password?: string; // اختياري لأغراض العرض
 }
 
-// ... بقية الأنواع (Space, Task, etc.) تبقى كما هي
+export interface Task {
+  id: string;
+  text: string;
+  completed: boolean;
+  time?: string;
+}
+
+export interface DayData {
+  id: string; // Format: YYYY-MM-DD
+  spaceId: string;
+  notes: string;
+  tasks: Task[];
+  media?: string[]; // روابط الصور أو الملفات
+}
+
+export interface Space {
+  id: string;
+  name: string;
+  primaryColor: string;
+  managerId?: string;
+  createdAt: string;
+  userLimit?: number; // الحقل الجديد (اختياري لتجنب أخطاء البيانات القديمة)
+}
+
+export interface SystemSettings {
+  primaryColor: string;
+  brandName: string;
+  allowUserSignup: boolean;
+}
+
+export interface CalendarState {
+  [spaceId: string]: {
+    [dateId: string]: DayData;
+  };
+}
