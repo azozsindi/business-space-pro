@@ -6,11 +6,14 @@ import UserManagement from './components/UserManagement';
 import SpaceManagement from './components/SpaceManagement';
 import Settings from './components/Settings';
 import ProfileSettings from './components/ProfileSettings';
+// استيراد مكون الإحصائيات الجديد
+import Stats from './components/Stats'; 
+
 import { 
   ChevronLeft, ChevronRight, LayoutGrid, Calendar as CalendarIcon, 
   Users, Bell, Search, Plus, Paperclip, LogOut, ShieldCheck, Lock,
   CheckCircle, Clock, FileText, Info, AlertTriangle, TrendingUp, Building2, Download, Image as ImageIcon,
-  Settings as SettingsIcon, ChevronDown, Save, UserCog, Palette, Languages, Sun, Moon
+  Settings as SettingsIcon, ChevronDown, Save, UserCog, Palette, Languages, Sun, Moon, BarChart3
 } from 'lucide-react';
 
 // قاموس الترجمة
@@ -51,7 +54,6 @@ const translations = {
   }
 };
 
-// --- نظام التعليمات حسب الصلاحيات ---
 const roleInstructions: Record<string, { title: string, steps: string[], color: string }> = {
   'super-admin': {
     title: "صلاحيات السوبر أدمن (التحكم المطلق)",
@@ -92,7 +94,6 @@ const roleInstructions: Record<string, { title: string, steps: string[], color: 
 };
 
 const App: React.FC = () => {
-  // --- حالات النظام (اللغة والوضع الداكن) ---
   const [lang, setLang] = useState<'ar' | 'en'>(() => (localStorage.getItem('bs_lang') as 'ar' | 'en') || 'ar');
   const [darkMode, setDarkMode] = useState<boolean>(() => localStorage.getItem('bs_theme') === 'dark');
 
@@ -108,6 +109,11 @@ const App: React.FC = () => {
 
   const [spaces, setSpaces] = useState<Space[]>(() => {
     const saved = localStorage.getItem('bs_spaces');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('bs_users_data'); // تأكد من الاسم المستخدم في Stats
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -127,14 +133,13 @@ const App: React.FC = () => {
 
   const t = translations[lang];
   const isSuperAdmin = user?.role === 'super-admin';
-  const [view, setView] = useState<'calendar' | 'admin' | 'projects' | 'notifications' | 'spaces' | 'settings' | 'profile'>('calendar');
+  const [view, setView] = useState<'calendar' | 'admin' | 'projects' | 'notifications' | 'spaces' | 'settings' | 'profile' | 'stats'>('calendar');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSpaceId, setActiveSpaceId] = useState<string>(user?.spaceId || 'master_space');
   const [isSaving, setIsSaving] = useState(false);
 
-  // تحديث اللغة والاتجاه والوضع الداكن
   useEffect(() => {
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = lang;
@@ -150,14 +155,12 @@ const App: React.FC = () => {
     localStorage.setItem('bs_theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
-  // تحديث مساحة العمل النشطة
   useEffect(() => {
     if (user && activeSpaceId === 'master_space' && user.spaceId !== 'master_space' && !isSuperAdmin) {
       setActiveSpaceId(user.spaceId);
     }
   }, [user]);
 
-  // الحفظ التلقائي
   const firstUpdate = useRef(true);
   useEffect(() => {
     if (firstUpdate.current) {
@@ -179,7 +182,7 @@ const App: React.FC = () => {
     document.documentElement.style.setProperty('--primary-color', themeColor);
   }, [currentSpace, settings.primaryColor]);
 
-  const stats = useMemo(() => {
+  const statsSummary = useMemo(() => {
     if (!user) return { totalTasks: 0, completedTasks: 0, mediaCount: 0, daysActive: 0 };
     const targetId = activeSpaceId || user.spaceId;
     const spaceData = allCalendarData[targetId] || {};
@@ -220,14 +223,13 @@ const App: React.FC = () => {
     return (allCalendarData[targetId] && allCalendarData[targetId][id]) || { id, spaceId: targetId, notes: '', tasks: [], media: [] };
   };
 
-  // --- مكون صندوق التعليمات ---
   const InstructionBox = () => {
     if (!user) return null;
     const instr = roleInstructions[user.role] || roleInstructions['employee'];
     return (
       <div className={`mb-10 p-8 rounded-[2.5rem] border-2 border-dashed transition-all hover:border-primary/30 flex items-start gap-6 ${lang === 'ar' ? 'flex-row-reverse text-right' : 'text-left'} ${darkMode ? 'bg-slate-800/40 border-slate-700' : 'bg-white border-slate-100 shadow-sm'}`}>
         <div className={`w-14 h-14 ${instr.color} text-white rounded-2xl flex items-center justify-center shrink-0 shadow-lg animate-bounce-slow`}>
-          <Info size={28} />
+          <info size={28} />
         </div>
         <div className="flex-1">
           <h3 className={`text-xl font-black mb-3 ${darkMode ? 'text-white' : 'text-slate-800'}`}>{instr.title}</h3>
@@ -280,7 +282,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* أزرار التحكم السريع (لغة ووضع داكن) */}
         <div className="flex gap-2 p-1 bg-slate-800/50 rounded-2xl border border-slate-700">
           <button onClick={() => setDarkMode(!darkMode)} className="flex-1 flex items-center justify-center py-2 rounded-xl hover:bg-slate-700 transition-all text-slate-300">
             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
@@ -295,8 +296,8 @@ const App: React.FC = () => {
             <CalendarIcon size={20} /> {t.calendar}
           </button>
           
-          <button onClick={() => setView('projects')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'projects' ? 'bg-primary text-white shadow-xl' : 'hover:bg-slate-800 hover:text-white'}`}>
-            <TrendingUp size={20} /> {t.stats}
+          <button onClick={() => setView('stats')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'stats' ? 'bg-primary text-white shadow-xl' : 'hover:bg-slate-800 hover:text-white'}`}>
+            <BarChart3 size={20} /> {t.stats}
           </button>
 
           <button onClick={() => setView('notifications')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'notifications' ? 'bg-primary text-white shadow-xl' : 'hover:bg-slate-800 hover:text-white'}`}>
@@ -353,36 +354,34 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-4">
-             {isSuperAdmin ? (
-               <div className={`relative flex items-center gap-2 ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}>
-                 <Building2 size={18} className="text-primary" />
-                 <select 
-                   value={activeSpaceId}
-                   onChange={(e) => setActiveSpaceId(e.target.value)}
-                   className={`border-none rounded-xl py-2 px-8 text-xs font-black outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}
-                 >
-                   <option value="master_space">{t.mainSpace}</option>
-                   {spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                 </select>
-               </div>
-             ) : (
-               <div className={`px-4 py-2 rounded-xl text-xs font-black ${darkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>{currentSpaceName}</div>
-             )}
+              {isSuperAdmin ? (
+                <div className={`relative flex items-center gap-2 ${lang === 'ar' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <Building2 size={18} className="text-primary" />
+                  <select 
+                    value={activeSpaceId}
+                    onChange={(e) => setActiveSpaceId(e.target.value)}
+                    className={`border-none rounded-xl py-2 px-8 text-xs font-black outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer ${darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`}
+                  >
+                    <option value="master_space">{t.mainSpace}</option>
+                    {spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <div className={`px-4 py-2 rounded-xl text-xs font-black ${darkMode ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-500'}`}>{currentSpaceName}</div>
+              )}
           </div>
         </header>
 
         <div className={`flex-1 p-12 overflow-y-auto custom-scrollbar transition-colors duration-500 ${darkMode ? 'bg-[#0f172a]' : 'bg-[#f8fafc]'}`}>
           {view === 'calendar' ? (
             <div className="max-w-7xl mx-auto">
-              {/* إضافة صندوق التعليمات هنا */}
               <InstructionBox />
-
               <div className={`flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16 ${lang === 'ar' ? 'md:flex-row-reverse' : ''}`}>
                 <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
                   <h1 className={`text-6xl font-black mb-4 tracking-tighter ${darkMode ? 'text-white' : 'text-slate-900'}`}>
                     {currentDate.toLocaleDateString(lang === 'ar' ? 'ar-SA' : 'en-US', { month: 'long', year: 'numeric' })}
                   </h1>
-                  <p className="text-lg text-slate-400 font-bold">{currentSpaceName}: <span className="text-primary">{stats.completedTasks} {t.completed}</span> / {stats.totalTasks} {t.tasks}</p>
+                  <p className="text-lg text-slate-400 font-bold">{currentSpaceName}: <span className="text-primary">{statsSummary.completedTasks} {t.completed}</span> / {statsSummary.totalTasks} {t.tasks}</p>
                 </div>
                 <div className={`flex items-center gap-3 p-3 rounded-[2.2rem] shadow-2xl border transition-colors ${darkMode ? 'bg-slate-800 border-slate-700 shadow-none' : 'bg-white border-slate-100'}`}>
                   <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + (lang === 'ar' ? 1 : -1), 1))} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-2xl text-slate-600 dark:text-slate-300 transition-all">
@@ -425,10 +424,12 @@ const App: React.FC = () => {
                 })}
               </div>
             </div>
-          ) : view === 'projects' ? (
-            <div className={lang === 'ar' ? 'text-right' : 'text-left'}>
-               <h2 className={`text-5xl font-black mb-12 tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>{t.stats}</h2>
-            </div>
+          ) : view === 'stats' ? (
+            <Stats 
+              calendarState={allCalendarData} 
+              spaces={spaces} 
+              users={users} 
+            />
           ) : view === 'profile' ? (
             <ProfileSettings user={user} onUpdate={() => {}} />
           ) : view === 'admin' ? (
