@@ -16,7 +16,7 @@ export interface User {
   spaceId: string;
   permissions: UserPermissions;
   avatar?: string;
-  password?: string; // اختياري لأغراض العرض
+  password?: string;
 }
 
 export interface Task {
@@ -26,12 +26,22 @@ export interface Task {
   time?: string;
 }
 
+// الواجهة الجديدة للوسائط (ضرورية لدعم الصوت والكاميرا والملفات)
+export interface MediaItem {
+  id: string;
+  type: 'image' | 'file' | 'audio' | 'video';
+  url: string; // Base64 للصور/الصوت أو رابط الملف
+  name: string;
+  size?: string;
+  date: string;
+}
+
 export interface DayData {
   id: string; // Format: YYYY-MM-DD
   spaceId: string;
   notes: string;
   tasks: Task[];
-  media?: string[]; // روابط الصور أو الملفات
+  media: MediaItem[]; // تم التحديث من string[] إلى MediaItem[]
 }
 
 export interface Space {
@@ -40,7 +50,7 @@ export interface Space {
   primaryColor: string;
   managerId?: string;
   createdAt: string;
-  userLimit?: number; // الحقل الجديد (اختياري لتجنب أخطاء البيانات القديمة)
+  userLimit?: number; 
 }
 
 export interface SystemSettings {
