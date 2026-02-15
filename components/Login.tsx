@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { LayoutGrid, Lock, User as UserIcon, AlertCircle, ShieldX } from 'lucide-react';
+import { LayoutGrid, Lock, User as UserIcon, AlertCircle, ShieldX, Loader2 } from 'lucide-react';
 import { User, SystemSettings } from '../types';
+import { supabase } from '../supabaseClient'; // الربط بالسحابة
 
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -11,10 +12,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, settings }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     // 1. حالة السوبر أدمن (عزوز) - دخول مباشر بصلاحيات كاملة
     if (username === 'azoos' && password === '0001000') {
@@ -24,7 +27,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, settings }) => {
         fullName: 'عزوز', 
         role: 'super-admin',
         spaceId: 'master_space',
-        isActive: true, // السوبر أدمن دائماً نشط
+        isActive: true,
         permissions: { 
           canEdit: true, 
           canViewMedia: true, 
@@ -34,30 +37,57 @@ const Login: React.FC<LoginProps> = ({ onLogin, settings }) => {
         }
       };
       onLogin(adminUser);
+      setLoading(false);
       return;
     }
 
-    // 2. جلب المستخدمين من التخزين المحلي (التأكد من استخدام المفتاح الصحيح)
-    const savedUsers: User[] = JSON.parse(localStorage.getItem('bs_users_data') || '[]');
-    
-    // البحث عن المستخدم بمطابقة الاسم وكلمة المرور
-    const foundUser = savedUsers.find((u) => u.username === username && u.password === password);
-    
-    if (foundUser) {
-      // 3. التحقق من حالة تفعيل الحساب
-      if (foundUser.isActive === false) {
-        setError('عذراً، هذا الحساب معطل حالياً. يرجى مراجعة الإدارة.');
-        return;
+    try {
+      // 2. البحث عن الموظف في Supabase أونلاين
+      const { data, error: sbError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('username', username)
+        .eq('password', password)
+        .single();
+
+      if (sbError || !data) {
+        setError('اسم المستخدم أو كلمة المرور غير صحيحة');
+      } else {
+        // 3. التحقق من حالة تفعيل الحساب
+        if (data.is_active === false) {
+          setError('عذراً، هذا الحساب معطل حالياً. يرجى مراجعة الإدارة.');
+          setLoading(false);
+          return;
+        }
+
+        // تحويل بيانات قاعدة البيانات لتناسب نوع User في مشروعك
+        const loggedInUser: User = {
+          id: data.id,
+          username: data.username,
+          fullName: data.full_name,
+          role: data.role,
+          spaceId: data.space_id,
+          isActive: data.is_active,
+          permissions: {
+            canEdit: true,
+            canViewMedia: true,
+            canViewTasks: true,
+            canManageUsers: ['admin', 'super-admin', 'manager'].includes(data.role),
+            canCreateSpaces: data.role === 'super-admin'
+          }
+        };
+        
+        onLogin(loggedInUser);
       }
-      
-      onLogin(foundUser);
-    } else {
-      setError('اسم المستخدم أو كلمة المرور غير صحيحة');
+    } catch (err) {
+      setError('حدث خطأ في الاتصال بقاعدة البيانات السحابية');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4" dir="rtl">
       <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-10">
         <div className="flex flex-col items-center mb-10">
           <div 
@@ -67,7 +97,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, settings }) => {
             <LayoutGrid size={40} />
           </div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">{settings.brandName}</h1>
-          <p className="text-slate-500 mt-2 font-medium">مرحباً بك في مساحتك المهنية</p>
+          <p className="text-slate-500 mt-2 font-medium text-center">مرحباً بك في مساحتك المهنية (Cloud)</p>
         </div>
 
         {/* عرض الأخطاء */}
@@ -80,42 +110,49 @@ const Login: React.FC<LoginProps> = ({ onLogin, settings }) => {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
-            <label className="text-xs font-black text-slate-400 mr-2 block text-right">اسم المستخدم</label>
-            <input 
-              type="text" 
-              value={username} 
-              onChange={e => setUsername(e.target.value)} 
-              className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 outline-none font-bold text-right transition-all" 
-              style={{ '--tw-ring-color': settings.primaryColor } as any} 
-              placeholder="أدخل اسم المستخدم" 
-              required 
-            />
+            <label className="text-xs font-black text-slate-400 mr-2 block text-right uppercase">اسم المستخدم</label>
+            <div className="relative">
+              <UserIcon className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+              <input 
+                type="text" 
+                value={username} 
+                onChange={e => setUsername(e.target.value)} 
+                className="w-full p-5 pr-12 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 outline-none font-bold text-right transition-all" 
+                style={{ '--tw-ring-color': settings.primaryColor } as any} 
+                placeholder="أدخل اسم المستخدم" 
+                required 
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-black text-slate-400 mr-2 block text-right">كلمة المرور</label>
-            <input 
-              type="password" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 outline-none font-bold text-right transition-all" 
-              style={{ '--tw-ring-color': settings.primaryColor } as any} 
-              placeholder="••••••••" 
-              required 
-            />
+            <label className="text-xs font-black text-slate-400 mr-2 block text-right uppercase">كلمة المرور</label>
+            <div className="relative">
+              <Lock className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+              <input 
+                type="password" 
+                value={password} 
+                onChange={e => setPassword(e.target.value)} 
+                className="w-full p-5 pr-12 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 outline-none font-bold text-right transition-all" 
+                style={{ '--tw-ring-color': settings.primaryColor } as any} 
+                placeholder="••••••••" 
+                required 
+              />
+            </div>
           </div>
 
           <button 
             type="submit" 
-            className="w-full py-5 text-white rounded-2xl font-black shadow-xl transition-all active:scale-95 hover:brightness-110 mt-4" 
+            disabled={loading}
+            className="w-full py-5 text-white rounded-2xl font-black shadow-xl transition-all active:scale-95 hover:brightness-110 mt-4 flex items-center justify-center gap-2" 
             style={{ backgroundColor: settings.primaryColor }}
           >
-            دخول النظام
+            {loading ? <Loader2 className="animate-spin" size={24} /> : 'دخول النظام'}
           </button>
         </form>
 
         <div className="mt-8 text-center">
-          <p className="text-xs text-slate-400 font-bold">نظام الإدارة الذكي v2.0</p>
+          <p className="text-xs text-slate-400 font-bold">نظام الإدارة السحابي v2.1</p>
         </div>
       </div>
     </div>
