@@ -64,7 +64,7 @@ const roleInstructions: Record<string, { title: string, steps: string[], color: 
     steps: [
       "يمكنك مراقبة كافة مساحات العمل وتعديل إعداداتها البرمجية.",
       "لديك الصلاحية لتحديد عدد المستخدمين الأقصى لكل مساحة عمل.",
-      "يمكنك إضافة مدراء نظام (Admins) وتعيينهم in أي مساحة."
+      "يمكنك إضافة مدراء نظام (Admins) وتعيينهم في أي مساحة."
     ],
     color: "bg-rose-500"
   },
@@ -135,6 +135,14 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  // وظيفة لتحديث قائمة المستخدمين من الـ LocalStorage فوراً
+  const refreshUsersList = () => {
+    const saved = localStorage.getItem('bs_users_data');
+    if (saved) {
+      setUsers(JSON.parse(saved));
+    }
+  };
+
   const t = translations[lang];
   const isSuperAdmin = user?.role === 'super-admin';
   const [view, setView] = useState<'calendar' | 'admin' | 'projects' | 'notifications' | 'spaces' | 'settings' | 'profile' | 'stats'>('calendar');
@@ -203,6 +211,7 @@ const App: React.FC = () => {
     setUser(loggedUser);
     setActiveSpaceId(loggedUser.spaceId);
     localStorage.setItem('bs_session', JSON.stringify(loggedUser));
+    refreshUsersList(); // تحديث القائمة عند الدخول
   };
 
   const handleLogout = () => {
@@ -317,7 +326,7 @@ const App: React.FC = () => {
           </button>
 
           {(isSuperAdmin || user.role === 'admin' || user.role === 'manager') && (
-            <button onClick={() => setView('admin')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'admin' ? 'bg-primary text-white shadow-xl' : 'hover:bg-slate-800 hover:text-white'}`}>
+            <button onClick={() => { refreshUsersList(); setView('admin'); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'admin' ? 'bg-primary text-white shadow-xl' : 'hover:bg-slate-800 hover:text-white'}`}>
               <Users size={20} /> {t.admin}
             </button>
           )}
@@ -453,7 +462,12 @@ const App: React.FC = () => {
               }} 
             />
           ) : view === 'admin' ? (
-            <UserManagement currentUser={user} isSuperAdmin={isSuperAdmin} />
+            <UserManagement 
+              currentUser={user} 
+              isSuperAdmin={isSuperAdmin} 
+              usersList={users} 
+              onUsersChange={refreshUsersList} 
+            />
           ) : view === 'spaces' && isSuperAdmin ? (
             <SpaceManagement />
           ) : view === 'settings' && isSuperAdmin ? (
