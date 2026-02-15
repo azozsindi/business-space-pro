@@ -98,34 +98,44 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSpaceId, setActiveSpaceId] = useState<string>('master_space');
   const [isSaving, setIsSaving] = useState(false);
+  const [dbStatus, setDbStatus] = useState<'online' | 'offline'>('online');
 
   // --- 2. Database Synchronization ---
   const refreshUsersList = async () => {
-    const { data, error } = await supabase.from('profiles').select('*');
-    if (!error && data) {
-      const formatted: User[] = data.map(u => ({
-        id: u.id, username: u.username, fullName: u.full_name, role: u.role, 
-        spaceId: u.space_id, isActive: u.is_active, password: u.password,
-        permissions: { 
-          canManageUsers: ['admin', 'super-admin', 'manager'].includes(u.role),
-          canCreateSpaces: u.role === 'super-admin',
-          canViewAllReports: u.role !== 'employee'
-        }
-      }));
-      setUsers(formatted);
+    try {
+      const { data, error } = await supabase.from('profiles').select('*');
+      if (error) throw error;
+      if (data) {
+        const formatted: User[] = data.map(u => ({
+          id: u.id, username: u.username, fullName: u.full_name, role: u.role, 
+          spaceId: u.space_id, isActive: u.is_active, password: u.password,
+          permissions: { 
+            canManageUsers: ['admin', 'super-admin', 'manager'].includes(u.role),
+            canCreateSpaces: u.role === 'super-admin',
+            canViewAllReports: u.role !== 'employee'
+          }
+        }));
+        setUsers(formatted);
+        setDbStatus('online');
+      }
+    } catch (err) {
+      console.error("Connection Error:", err);
+      setDbStatus('offline');
     }
   };
 
   const fetchSpaces = async () => {
-    const { data } = await supabase.from('spaces').select('*');
-    if (data) {
-      setSpaces(data.map(s => ({ 
-        id: s.id, 
-        name: s.name, 
-        primaryColor: s.primary_color, 
-        createdAt: s.created_at 
-      })));
-    }
+    try {
+      const { data, error } = await supabase.from('spaces').select('*');
+      if (!error && data) {
+        setSpaces(data.map(s => ({ 
+          id: s.id, 
+          name: s.name, 
+          primaryColor: s.primary_color, 
+          createdAt: s.created_at 
+        })));
+      }
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -215,6 +225,13 @@ const App: React.FC = () => {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
       `}</style>
 
+      {/* Cloud Status Indicator */}
+      {dbStatus === 'offline' && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] bg-rose-500 text-white px-6 py-2 rounded-full shadow-2xl flex items-center gap-3 text-xs font-black animate-bounce">
+          <AlertTriangle size={16} /> Connection Lost - Using Local Cache
+        </div>
+      )}
+
       {isSaving && (
         <div className="fixed bottom-8 left-8 bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-[100] text-xs font-black animate-pulse border border-slate-700">
           <ShieldCheck size={16} className="text-emerald-400" /> {t.saving}
@@ -259,7 +276,7 @@ const App: React.FC = () => {
             <UserCog size={20} /> {t.profile}
           </button>
 
-          {(isSuperAdmin || user.role === 'admin') && (
+          {(isSuperAdmin || user.role === 'admin' || user.role === 'manager') && (
             <button onClick={() => { refreshUsersList(); setView('admin'); }} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'admin' ? 'bg-primary text-white shadow-xl' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
               <Users size={20} /> {t.admin}
             </button>
