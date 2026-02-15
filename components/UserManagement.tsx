@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Space } from '../types';
+import { supabase } from '../supabaseClient'; // الربط الجديد
 import { 
   Users, UserPlus, ShieldCheck, UserCog, UserCheck, 
   Trash2, Building2, AlertCircle, ShieldAlert, UserX,
@@ -32,22 +33,19 @@ const UserManagement: React.FC<UserManagementProps> = ({
     fullName: '',
     role: 'employee' as UserRole,
     spaceId: isSuperAdmin ? 'master_space' : (currentUser.spaceId || 'master_space'),
-    password: '' // إضافة حقل كلمة المرور لضمان عمل اليوزر
+    password: ''
   });
 
-  // --- منطق الفلترة الذكي ---
-  // السوبر أدمن يرى الجميع، المدير يرى فقط من هم في نفس مساحته
   const visibleUsers = isSuperAdmin 
     ? usersList.filter(u => u.id !== currentUser.id) 
     : usersList.filter(u => u.spaceId === currentUser.spaceId && u.id !== currentUser.id);
 
-  // حساب السعة للمساحة الحالية
   const currentSpace = spaces.find(s => s.id === (isSuperAdmin ? 'master_space' : currentUser.spaceId));
   const spaceUserCount = usersList.filter(u => u.spaceId === (isSuperAdmin ? 'master_space' : currentUser.spaceId)).length;
   const limit = isSuperAdmin ? Infinity : (currentSpace?.userLimit || 0);
 
-  // إضافة مستخدم جديد
-  const handleAddUser = (e: React.FormEvent) => {
+  // --- إضافة مستخدم جديد (أونلاين) ---
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!isSuperAdmin && spaceUserCount >= limit) {
@@ -55,46 +53,51 @@ const UserManagement: React.FC<UserManagementProps> = ({
       return;
     }
 
-    // التحقق من اسم المستخدم
     if (usersList.find(u => u.username === newUser.username)) {
       alert("⚠️ اسم المستخدم هذا موجود مسبقاً");
       return;
     }
 
-    const userToAdd: User = {
-      id: Date.now().toString(),
-      username: newUser.username,
-      fullName: newUser.fullName,
-      role: newUser.role,
-      spaceId: isSuperAdmin ? newUser.spaceId : currentUser.spaceId, // المدير يضيف لمساحته فقط
-      password: newUser.password || '123456', // كلمة مرور افتراضية إذا لم تحدد
-      isActive: true, 
-      permissions: {
-        canManageUsers: ['manager', 'admin', 'super-admin'].includes(newUser.role),
-        canCreateSpaces: newUser.role === 'super-admin',
-        canViewAllReports: newUser.role !== 'employee'
-      }
-    };
+    // الحفظ في سوبابيس
+    const { data, error } = await supabase
+      .from('profiles')
+      .insert([{
+        username: newUser.username,
+        full_name: newUser.fullName,
+        role: newUser.role,
+        space_id: isSuperAdmin ? newUser.spaceId : currentUser.spaceId,
+        password: newUser.password || '123456',
+        is_active: true
+      }]);
 
-    const updatedUsers = [...usersList, userToAdd];
-    localStorage.setItem('bs_users_data', JSON.stringify(updatedUsers));
-    onUsersChange(); // تحديث App.tsx
-    setNewUser({ ...newUser, username: '', fullName: '', password: '' });
+    if (error) {
+      alert("خطأ في الربط: " + error.message);
+    } else {
+      alert("✅ تم إنشاء الحساب أونلاين بنجاح!");
+      onUsersChange(); // تحديث القائمة
+      setNewUser({ ...newUser, username: '', fullName: '', password: '' });
+    }
   };
 
-  const toggleUserStatus = (userId: string) => {
-    const updatedUsers = usersList.map(u => 
-      u.id === userId ? { ...u, isActive: !u.isActive } : u
-    );
-    localStorage.setItem('bs_users_data', JSON.stringify(updatedUsers));
-    onUsersChange();
+  // --- تعطيل / تفعيل الدخول (أونلاين) ---
+  const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ is_active: !currentStatus })
+      .eq('id', userId);
+
+    if (!error) onUsersChange();
   };
 
-  const deleteUser = (id: string) => {
+  // --- حذف عضو (أونلاين) ---
+  const deleteUser = async (id: string) => {
     if (confirm('هل أنت متأكد من حذف هذا العضو نهائياً؟')) {
-      const updatedUsers = usersList.filter(u => u.id !== id);
-      localStorage.setItem('bs_users_data', JSON.stringify(updatedUsers));
-      onUsersChange();
+      const { error } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', id);
+      
+      if (!error) onUsersChange();
     }
   };
 
@@ -118,9 +121,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
             <Users size={32} />
           </div>
           <div>
-            <h3 className="text-2xl font-black dark:text-white">إدارة فريق العمل</h3>
+            <h3 className="text-2xl font-black dark:text-white">إدارة فريق العمل (Cloud)</h3>
             <p className="text-sm font-bold text-slate-400">
-              {isSuperAdmin ? 'التحكم الشامل في النظام والمساحات' : `إدارة أعضاء مساحة: ${currentSpace?.name || 'الخاصة بك'}`}
+              {isSuperAdmin ? 'التحكم الشامل في الموظفين أونلاين' : `إدارة أعضاء مساحة: ${currentSpace?.name || 'الخاصة بك'}`}
             </p>
           </div>
         </div>
@@ -128,7 +131,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
         {!isSuperAdmin && (
           <div className="flex items-center gap-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
             <div className="text-center">
-              <p className="text-[10px] font-black text-slate-400 uppercase mb-1">السعة المستخدمة لمساحتك</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-1">السعة المستخدمة</p>
               <p className={`text-xl font-black ${spaceUserCount >= limit ? 'text-rose-500' : 'text-primary'}`}>{spaceUserCount} / {limit}</p>
             </div>
             <div className="w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
@@ -137,7 +140,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
         )}
       </div>
 
-      {/* نموذج الإضافة - متاح للسوبر أدمن والمدير */}
+      {/* نموذج الإضافة */}
       <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] shadow-xl border border-slate-100 dark:border-slate-700">
         <h4 className="text-lg font-black text-slate-800 dark:text-white mb-8 flex items-center gap-3 flex-row-reverse">
           <UserPlus size={20} className="text-primary" /> إضافة عضو جديد للقسم
@@ -180,7 +183,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
 
           <div className="flex items-end">
             <button type="submit" className="w-full bg-primary text-white py-4 rounded-2xl font-black shadow-lg hover:shadow-primary/20 hover:-translate-y-1 transition-all">
-              تأكيد التعيين
+              تأكيد التعيين أونلاين
             </button>
           </div>
         </form>
@@ -203,15 +206,15 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     {getRoleBadge(u.role)}
                   </div>
                   <div className="flex items-center gap-3 text-xs text-slate-400 font-bold mt-1 justify-end">
-                    <span className="flex items-center gap-1">{u.username} <Mail size={12}/></span>
-                    <span className="flex items-center gap-1 text-primary">| {spaces.find(s => s.id === u.spaceId)?.name || 'الرئيسية'} <Building2 size={12}/></span>
+                    <span className="flex items-center gap-1">@{u.username} <Mail size={12}/></span>
+                    <span className="flex items-center gap-1 text-primary">| {u.spaceId} <Building2 size={12}/></span>
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => toggleUserStatus(u.id)}
+                  onClick={() => toggleUserStatus(u.id, u.isActive)}
                   className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black transition-all ${
                     u.isActive 
                       ? 'bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white' 
