@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, UserRole, Space } from '../types';
 import { 
   Users, UserPlus, ShieldCheck, UserCog, UserCheck, 
@@ -9,8 +9,8 @@ import {
 interface UserManagementProps {
   currentUser: User;
   isSuperAdmin: boolean;
-  usersList: User[]; // تستقبل القائمة من App.tsx لضمان التزامن
-  onUsersChange: () => void; // وظيفة لتنبيه App.tsx عند حدوث تغيير
+  usersList: User[]; 
+  onUsersChange: () => void; 
 }
 
 const UserManagement: React.FC<UserManagementProps> = ({ 
@@ -20,20 +20,23 @@ const UserManagement: React.FC<UserManagementProps> = ({
   onUsersChange 
 }) => {
   
-  const [spaces] = useState<Space[]>(() => {
+  const [spaces, setSpaces] = useState<Space[]>([]);
+
+  useEffect(() => {
     const saved = localStorage.getItem('bs_spaces');
-    return saved ? JSON.parse(saved) : [];
-  });
+    if (saved) setSpaces(JSON.parse(saved));
+  }, []);
 
   const [newUser, setNewUser] = useState({
     username: '',
     fullName: '',
     role: 'employee' as UserRole,
     spaceId: isSuperAdmin ? 'master_space' : (currentUser.spaceId || 'master_space'),
-    password: ''
+    password: '' // إضافة حقل كلمة المرور لضمان عمل اليوزر
   });
 
   // --- منطق الفلترة الذكي ---
+  // السوبر أدمن يرى الجميع، المدير يرى فقط من هم في نفس مساحته
   const visibleUsers = isSuperAdmin 
     ? usersList.filter(u => u.id !== currentUser.id) 
     : usersList.filter(u => u.spaceId === currentUser.spaceId && u.id !== currentUser.id);
@@ -48,7 +51,13 @@ const UserManagement: React.FC<UserManagementProps> = ({
     e.preventDefault();
     
     if (!isSuperAdmin && spaceUserCount >= limit) {
-      alert(`⚠️ خطأ: لقد وصلت للحد الأقصى المسموح به (${limit}).`);
+      alert(`⚠️ خطأ: لقد وصلت للحد الأقصى المسموح به لهذه المساحة (${limit}).`);
+      return;
+    }
+
+    // التحقق من اسم المستخدم
+    if (usersList.find(u => u.username === newUser.username)) {
+      alert("⚠️ اسم المستخدم هذا موجود مسبقاً");
       return;
     }
 
@@ -57,8 +66,9 @@ const UserManagement: React.FC<UserManagementProps> = ({
       username: newUser.username,
       fullName: newUser.fullName,
       role: newUser.role,
-      spaceId: newUser.spaceId,
-      isActive: true, // يضاف مفعلاً تلقائياً
+      spaceId: isSuperAdmin ? newUser.spaceId : currentUser.spaceId, // المدير يضيف لمساحته فقط
+      password: newUser.password || '123456', // كلمة مرور افتراضية إذا لم تحدد
+      isActive: true, 
       permissions: {
         canManageUsers: ['manager', 'admin', 'super-admin'].includes(newUser.role),
         canCreateSpaces: newUser.role === 'super-admin',
@@ -72,7 +82,6 @@ const UserManagement: React.FC<UserManagementProps> = ({
     setNewUser({ ...newUser, username: '', fullName: '', password: '' });
   };
 
-  // تفعيل أو تعطيل حساب
   const toggleUserStatus = (userId: string) => {
     const updatedUsers = usersList.map(u => 
       u.id === userId ? { ...u, isActive: !u.isActive } : u
@@ -81,7 +90,6 @@ const UserManagement: React.FC<UserManagementProps> = ({
     onUsersChange();
   };
 
-  // حذف مستخدم
   const deleteUser = (id: string) => {
     if (confirm('هل أنت متأكد من حذف هذا العضو نهائياً؟')) {
       const updatedUsers = usersList.filter(u => u.id !== id);
@@ -112,7 +120,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
           <div>
             <h3 className="text-2xl font-black dark:text-white">إدارة فريق العمل</h3>
             <p className="text-sm font-bold text-slate-400">
-              {isSuperAdmin ? 'التحكم الشامل في النظام' : `إدارة أعضاء مساحة: ${currentSpace?.name || 'الافتراضية'}`}
+              {isSuperAdmin ? 'التحكم الشامل في النظام والمساحات' : `إدارة أعضاء مساحة: ${currentSpace?.name || 'الخاصة بك'}`}
             </p>
           </div>
         </div>
@@ -120,7 +128,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
         {!isSuperAdmin && (
           <div className="flex items-center gap-6 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
             <div className="text-center">
-              <p className="text-[10px] font-black text-slate-400 uppercase mb-1">السعة المستخدمة</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-1">السعة المستخدمة لمساحتك</p>
               <p className={`text-xl font-black ${spaceUserCount >= limit ? 'text-rose-500' : 'text-primary'}`}>{spaceUserCount} / {limit}</p>
             </div>
             <div className="w-px h-8 bg-slate-200 dark:bg-slate-700"></div>
@@ -129,42 +137,63 @@ const UserManagement: React.FC<UserManagementProps> = ({
         )}
       </div>
 
-      {/* نموذج الإضافة */}
+      {/* نموذج الإضافة - متاح للسوبر أدمن والمدير */}
       <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] shadow-xl border border-slate-100 dark:border-slate-700">
         <h4 className="text-lg font-black text-slate-800 dark:text-white mb-8 flex items-center gap-3 flex-row-reverse">
           <UserPlus size={20} className="text-primary" /> إضافة عضو جديد للقسم
         </h4>
-        <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <input required type="text" placeholder="الاسم الكامل" value={newUser.fullName} onChange={e => setNewUser({...newUser, fullName: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all" />
-          <input required type="text" placeholder="اسم المستخدم" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all" />
+        <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 px-2">الاسم الكامل</label>
+            <input required type="text" placeholder="الاسم الكامل" value={newUser.fullName} onChange={e => setNewUser({...newUser, fullName: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 px-2">اسم المستخدم</label>
+            <input required type="text" placeholder="اسم المستخدم" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 px-2">كلمة المرور</label>
+            <input required type="password" placeholder="كلمة المرور" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all" />
+          </div>
           
-          <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none cursor-pointer">
-            <option value="employee">موظف</option>
-            {isSuperAdmin && <option value="manager">مدير مساحة</option>}
-            {isSuperAdmin && <option value="admin">أدمن نظام</option>}
-          </select>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 px-2">الرتبة</label>
+            <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none cursor-pointer">
+              <option value="employee">موظف</option>
+              {isSuperAdmin && <option value="manager">مدير مساحة</option>}
+              {isSuperAdmin && <option value="admin">أدمن نظام</option>}
+            </select>
+          </div>
 
-          {isSuperAdmin && (
-            <select value={newUser.spaceId} onChange={e => setNewUser({...newUser, spaceId: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none cursor-pointer">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 px-2">المساحة</label>
+            <select 
+              value={newUser.spaceId} 
+              disabled={!isSuperAdmin}
+              onChange={e => setNewUser({...newUser, spaceId: e.target.value})} 
+              className={`w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none ${!isSuperAdmin ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            >
               <option value="master_space">المساحة الرئيسية</option>
               {spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-          )}
+          </div>
 
-          <button type="submit" className="lg:col-span-4 bg-primary text-white py-5 rounded-2xl font-black shadow-lg hover:shadow-primary/20 hover:-translate-y-1 active:scale-95 transition-all">
-            تأكيد التعيين في النظام
-          </button>
+          <div className="flex items-end">
+            <button type="submit" className="w-full bg-primary text-white py-4 rounded-2xl font-black shadow-lg hover:shadow-primary/20 hover:-translate-y-1 transition-all">
+              تأكيد التعيين
+            </button>
+          </div>
         </form>
       </div>
 
       {/* قائمة المستخدمين */}
       <div className="space-y-4">
-        <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest px-4">الأعضاء الحاليين</h4>
+        <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest px-4">الأعضاء الخاضعين لإدارتك</h4>
         <div className="grid gap-4">
           {visibleUsers.map(u => (
             <div key={u.id} className={`p-6 rounded-[2.5rem] border-2 transition-all flex flex-col md:flex-row items-center justify-between gap-6 ${u.isActive ? 'bg-white dark:bg-slate-800 border-slate-50 dark:border-slate-700 shadow-sm' : 'bg-slate-100/50 dark:bg-slate-900/50 border-dashed border-slate-200 dark:border-slate-800 opacity-60'}`}>
               
-              <div className="flex items-center gap-5 flex-row-reverse">
+              <div className="flex items-center gap-5 flex-row-reverse text-right">
                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl ${u.isActive ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-400'}`}>
                   {u.fullName.substring(0, 1)}
                 </div>
@@ -175,7 +204,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                   </div>
                   <div className="flex items-center gap-3 text-xs text-slate-400 font-bold mt-1 justify-end">
                     <span className="flex items-center gap-1">{u.username} <Mail size={12}/></span>
-                    {isSuperAdmin && <span className="flex items-center gap-1 text-primary">| {spaces.find(s => s.id === u.spaceId)?.name || 'الرئيسية'} <Building2 size={12}/></span>}
+                    <span className="flex items-center gap-1 text-primary">| {spaces.find(s => s.id === u.spaceId)?.name || 'الرئيسية'} <Building2 size={12}/></span>
                   </div>
                 </div>
               </div>
@@ -190,7 +219,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
                   }`}
                 >
                   {u.isActive ? <UserMinus size={18} /> : <UserCheck size={18} />}
-                  {u.isActive ? 'تعطيل الحساب' : 'تفعيل الحساب'}
+                  {u.isActive ? 'تعطيل الدخول' : 'تفعيل الدخول'}
                 </button>
 
                 <button
@@ -206,7 +235,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
           {visibleUsers.length === 0 && (
             <div className="text-center py-20 bg-slate-50 dark:bg-slate-900/20 rounded-[3rem] border-2 border-dashed border-slate-200 dark:border-slate-800">
               <UserX size={48} className="mx-auto text-slate-300 mb-4" />
-              <p className="font-black text-slate-400">لا يوجد أعضاء في هذا النطاق حالياً</p>
+              <p className="font-black text-slate-400">لا يوجد موظفين مسجلين حالياً</p>
             </div>
           )}
         </div>
