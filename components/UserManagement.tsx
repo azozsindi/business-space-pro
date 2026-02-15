@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole, Space } from '../types';
-import { supabase } from '../supabaseClient'; // الربط الجديد
+import { supabase } from '../supabaseClient';
 import { 
   Users, UserPlus, ShieldCheck, UserCog, UserCheck, 
   Trash2, Building2, AlertCircle, ShieldAlert, UserX,
-  Mail, UserMinus, Shield
+  Mail, UserMinus, Shield, Key, Eye, EyeOff
 } from 'lucide-react';
 
 interface UserManagementProps {
@@ -22,6 +22,7 @@ const UserManagement: React.FC<UserManagementProps> = ({
 }) => {
   
   const [spaces, setSpaces] = useState<Space[]>([]);
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const saved = localStorage.getItem('bs_spaces');
@@ -44,7 +45,10 @@ const UserManagement: React.FC<UserManagementProps> = ({
   const spaceUserCount = usersList.filter(u => u.spaceId === (isSuperAdmin ? 'master_space' : currentUser.spaceId)).length;
   const limit = isSuperAdmin ? Infinity : (currentSpace?.userLimit || 0);
 
-  // --- إضافة مستخدم جديد (أونلاين) ---
+  const togglePasswordVisibility = (id: string) => {
+    setShowPasswords(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -58,7 +62,6 @@ const UserManagement: React.FC<UserManagementProps> = ({
       return;
     }
 
-    // الحفظ في سوبابيس
     const { data, error } = await supabase
       .from('profiles')
       .insert([{
@@ -74,29 +77,22 @@ const UserManagement: React.FC<UserManagementProps> = ({
       alert("خطأ في الربط: " + error.message);
     } else {
       alert("✅ تم إنشاء الحساب أونلاين بنجاح!");
-      onUsersChange(); // تحديث القائمة
+      onUsersChange();
       setNewUser({ ...newUser, username: '', fullName: '', password: '' });
     }
   };
 
-  // --- تعطيل / تفعيل الدخول (أونلاين) ---
   const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
     const { error } = await supabase
       .from('profiles')
       .update({ is_active: !currentStatus })
       .eq('id', userId);
-
     if (!error) onUsersChange();
   };
 
-  // --- حذف عضو (أونلاين) ---
   const deleteUser = async (id: string) => {
     if (confirm('هل أنت متأكد من حذف هذا العضو نهائياً؟')) {
-      const { error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', id);
-      
+      const { error } = await supabase.from('profiles').delete().eq('id', id);
       if (!error) onUsersChange();
     }
   };
@@ -148,28 +144,28 @@ const UserManagement: React.FC<UserManagementProps> = ({
         <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-400 px-2">الاسم الكامل</label>
-            <input required type="text" placeholder="الاسم الكامل" value={newUser.fullName} onChange={e => setNewUser({...newUser, fullName: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all" />
+            <input required type="text" placeholder="مثال: أحمد علي" value={newUser.fullName} onChange={e => setNewUser({...newUser, fullName: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all text-right" />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 px-2">اسم المستخدم</label>
-            <input required type="text" placeholder="اسم المستخدم" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all" />
+            <label className="text-[10px] font-black text-slate-400 px-2">اسم المستخدم (اليوزر)</label>
+            <input required type="text" placeholder="مثال: ahmed99" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all text-left" />
           </div>
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-400 px-2">كلمة المرور</label>
-            <input required type="password" placeholder="كلمة المرور" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all" />
+            <input required type="text" placeholder="اكتب كلمة مرور قوية" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none focus:ring-2 focus:ring-primary transition-all text-left" />
           </div>
           
           <div className="space-y-1">
             <label className="text-[10px] font-black text-slate-400 px-2">الرتبة</label>
             <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})} className="w-full bg-slate-50 dark:bg-slate-900 dark:text-white border-none rounded-2xl py-4 px-6 font-bold outline-none cursor-pointer">
-              <option value="employee">موظف</option>
-              {isSuperAdmin && <option value="manager">مدير مساحة</option>}
-              {isSuperAdmin && <option value="admin">أدمن نظام</option>}
+              <option value="employee">موظف (عادي)</option>
+              {isSuperAdmin && <option value="manager">مدير مساحة (محدود)</option>}
+              {isSuperAdmin && <option value="admin">أدمن نظام (شامل)</option>}
             </select>
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-slate-400 px-2">المساحة</label>
+            <label className="text-[10px] font-black text-slate-400 px-2">تعيين في مساحة</label>
             <select 
               value={newUser.spaceId} 
               disabled={!isSuperAdmin}
@@ -189,12 +185,12 @@ const UserManagement: React.FC<UserManagementProps> = ({
         </form>
       </div>
 
-      {/* قائمة المستخدمين */}
+      {/* قائمة المستخدمين مع إظهار الباسورد */}
       <div className="space-y-4">
         <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest px-4">الأعضاء الخاضعين لإدارتك</h4>
         <div className="grid gap-4">
           {visibleUsers.map(u => (
-            <div key={u.id} className={`p-6 rounded-[2.5rem] border-2 transition-all flex flex-col md:flex-row items-center justify-between gap-6 ${u.isActive ? 'bg-white dark:bg-slate-800 border-slate-50 dark:border-slate-700 shadow-sm' : 'bg-slate-100/50 dark:bg-slate-900/50 border-dashed border-slate-200 dark:border-slate-800 opacity-60'}`}>
+            <div key={u.id} className={`p-6 rounded-[2.5rem] border-2 transition-all flex flex-col lg:flex-row items-center justify-between gap-6 ${u.isActive ? 'bg-white dark:bg-slate-800 border-slate-50 dark:border-slate-700 shadow-sm' : 'bg-slate-100/50 dark:bg-slate-900/50 border-dashed border-slate-200 dark:border-slate-800 opacity-60'}`}>
               
               <div className="flex items-center gap-5 flex-row-reverse text-right">
                 <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl ${u.isActive ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-400'}`}>
@@ -205,9 +201,16 @@ const UserManagement: React.FC<UserManagementProps> = ({
                     <h3 className="font-black text-slate-800 dark:text-white text-lg">{u.fullName}</h3>
                     {getRoleBadge(u.role)}
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-slate-400 font-bold mt-1 justify-end">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 font-bold mt-1 justify-end">
+                    <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded-lg">
+                      {showPasswords[u.id] ? u.password : '••••••••'} 
+                      <button onClick={() => togglePasswordVisibility(u.id)} className="text-primary hover:text-primary-focus">
+                        {showPasswords[u.id] ? <EyeOff size={14}/> : <Eye size={14}/>}
+                      </button>
+                      <Key size={12}/>
+                    </span>
                     <span className="flex items-center gap-1">@{u.username} <Mail size={12}/></span>
-                    <span className="flex items-center gap-1 text-primary">| {u.spaceId} <Building2 size={12}/></span>
+                    <span className="flex items-center gap-1 text-primary">| {spaces.find(s=>s.id===u.spaceId)?.name || u.spaceId} <Building2 size={12}/></span>
                   </div>
                 </div>
               </div>
