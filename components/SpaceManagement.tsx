@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Space, User } from '../types';
-import { supabase } from '../supabaseClient'; // الربط مع سوبابيس
+import { supabase } from '../supabaseClient'; 
 import { Building2, Plus, Trash2, X, Shield, User as UserIcon, Key, CheckCircle, Loader2 } from 'lucide-react';
 
 interface SpaceManagementProps {
@@ -18,15 +18,15 @@ const SpaceManagement: React.FC<SpaceManagementProps> = ({ onUpdate, onUsersUpda
   const [managerPass, setManagerPass] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // جلب المساحات من سوبابيس عند التحميل
+  // 1. جلب الفروع من سوبابيس (أونلاين)
   const fetchSpaces = async () => {
-    const { data, error } = await supabase.from('spaces').select('*');
+    const { data, error } = await supabase.from('spaces').select('*').order('created_at', { ascending: false });
     if (!error && data) {
       const formattedSpaces: Space[] = data.map(s => ({
         id: s.id,
         name: s.name,
         managerId: s.manager_id,
-        primaryColor: s.primary_color,
+        primaryColor: s.primary_color || '#4f46e5',
         userLimit: s.user_limit,
         createdAt: s.created_at
       }));
@@ -39,13 +39,14 @@ const SpaceManagement: React.FC<SpaceManagementProps> = ({ onUpdate, onUsersUpda
     fetchSpaces();
   }, []);
 
+  // 2. معالجة إضافة فرع جديد ومدير له
   const handleAddSpace = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !managerUsername || !managerPass) return;
     setLoading(true);
 
     try {
-      // 1. إنشاء المساحة في سوبابيس أولاً للحصول على ID
+      // أ- إنشاء المساحة في جدول spaces
       const { data: spaceData, error: spaceError } = await supabase
         .from('spaces')
         .insert([{
@@ -58,7 +59,7 @@ const SpaceManagement: React.FC<SpaceManagementProps> = ({ onUpdate, onUsersUpda
 
       if (spaceError) throw spaceError;
 
-      // 2. إنشاء حساب المدير وربطه بالمساحة الجديدة
+      // ب- إنشاء حساب المدير في جدول profiles وربطه بـ space_id
       const { error: userError } = await supabase
         .from('profiles')
         .insert([{
@@ -72,19 +73,21 @@ const SpaceManagement: React.FC<SpaceManagementProps> = ({ onUpdate, onUsersUpda
 
       if (userError) throw userError;
 
-      // تحديث الواجهة
+      // ج- تحديث الواجهة والنجاح
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 3000);
       resetForm();
-      fetchSpaces(); // إعادة جلب البيانات لتحديث القائمة
-      
+      fetchSpaces(); 
+      if (onUsersUpdate) onUsersUpdate([]); // تحديث قائمة المستخدمين في App
+
     } catch (err: any) {
-      alert("حدث خطأ أثناء الإنشاء: " + err.message);
+      alert("حدث خطأ أثناء الإنشاء السحابي: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  // 3. حذف المساحة
   const deleteSpace = async (id: string) => {
     if (window.confirm('⚠️ تحذير: حذف المساحة سيؤدي لحذف جميع الموظفين والبيانات المرتبطة بها نهائياً من السحابة. هل أنت متأكد؟')) {
       const { error } = await supabase.from('spaces').delete().eq('id', id);
@@ -106,9 +109,10 @@ const SpaceManagement: React.FC<SpaceManagementProps> = ({ onUpdate, onUsersUpda
 
   return (
     <div className="max-w-6xl mx-auto py-8 animate-in fade-in duration-500" dir="rtl">
+      {/* الهيدر */}
       <div className="flex flex-col md:flex-row items-center justify-between mb-12 gap-6 text-right">
         <div>
-          <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">إدارة الفروع والمساحات (Cloud)</h2>
+          <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">إدارة الفروع (Cloud)</h2>
           <p className="text-slate-500 dark:text-slate-400 font-bold">يمكنك إنشاء فروع مستقلة وتعيين مدراء لها أونلاين.</p>
         </div>
         <button 
@@ -119,12 +123,14 @@ const SpaceManagement: React.FC<SpaceManagementProps> = ({ onUpdate, onUsersUpda
         </button>
       </div>
 
+      {/* رسالة النجاح */}
       {showSuccess && (
         <div className="mb-8 flex items-center justify-center gap-3 bg-emerald-500/10 text-emerald-500 p-4 rounded-2xl border border-emerald-500/20 font-black animate-bounce">
           <CheckCircle size={20} /> تم تفعيل الفرع والمدير على السحابة بنجاح
         </div>
       )}
 
+      {/* شبكة المساحات */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {spaces.map(space => (
           <div key={space.id} className="bg-white dark:bg-slate-800 p-8 rounded-[2.8rem] border border-slate-100 dark:border-slate-700 shadow-xl group hover:border-primary transition-all relative overflow-hidden">
@@ -149,7 +155,7 @@ const SpaceManagement: React.FC<SpaceManagementProps> = ({ onUpdate, onUsersUpda
                   <UserIcon size={18} />
                </div>
                <div className="text-left">
-                  <p className="text-[10px] text-slate-400 font-black uppercase">تاريخ الانضمام</p>
+                  <p className="text-[10px] text-slate-400 font-black uppercase">تاريخ الإنشاء</p>
                   <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{new Date(space.createdAt).toLocaleDateString('ar-SA')}</p>
                </div>
             </div>
@@ -157,6 +163,7 @@ const SpaceManagement: React.FC<SpaceManagementProps> = ({ onUpdate, onUsersUpda
         ))}
       </div>
 
+      {/* نافذة إضافة فرع (Modal) */}
       {showAdd && (
         <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
            <div className="bg-white dark:bg-slate-800 w-full max-w-md rounded-[3rem] p-10 shadow-2xl border border-white/20">
@@ -168,31 +175,31 @@ const SpaceManagement: React.FC<SpaceManagementProps> = ({ onUpdate, onUsersUpda
               <form onSubmit={handleAddSpace} className="space-y-6 text-right">
                 <div>
                   <label className="text-xs font-black text-slate-400 mb-3 block mr-1">اسم النشاط التجاري</label>
-                  <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-5 bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-2xl outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary font-bold text-right dark:text-white" placeholder="مثلاً: فرع الرياض" required />
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-5 bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-2xl outline-none focus:border-primary font-bold text-right dark:text-white" placeholder="مثلاً: فرع الرياض" required />
                 </div>
                 
                 <div className="pt-6 border-t border-slate-100 dark:border-slate-700">
                   <label className="text-xs font-black text-slate-400 mb-3 block mr-1">اسم المستخدم للمدير</label>
-                  <input type="text" value={managerUsername} onChange={e => setManagerUsername(e.target.value)} className="w-full p-5 bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-2xl outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary font-bold text-left dark:text-white" placeholder="admin_riyadh" required />
+                  <input type="text" value={managerUsername} onChange={e => setManagerUsername(e.target.value)} className="w-full p-5 bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-2xl outline-none focus:border-primary font-bold text-left dark:text-white" placeholder="admin_riyadh" required />
                 </div>
 
                 <div>
                   <label className="text-xs font-black text-slate-400 mb-3 block mr-1">الاسم الكامل للمدير</label>
-                  <input type="text" value={managerFullName} onChange={e => setManagerFullName(e.target.value)} className="w-full p-5 bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-2xl outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary font-bold text-right dark:text-white" placeholder="محمد العتيبي" required />
+                  <input type="text" value={managerFullName} onChange={e => setManagerFullName(e.target.value)} className="w-full p-5 bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-2xl outline-none focus:border-primary font-bold text-right dark:text-white" placeholder="محمد العتيبي" required />
                 </div>
 
                 <div>
-                  <label className="text-xs font-black text-slate-400 mb-3 block mr-1">كلمة السر المؤقتة</label>
+                  <label className="text-xs font-black text-slate-400 mb-3 block mr-1">كلمة السر</label>
                   <div className="relative">
                     <Key className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                    <input type="text" value={managerPass} onChange={e => setManagerPass(e.target.value)} className="w-full p-5 pr-12 bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-2xl outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary font-bold text-left dark:text-white" placeholder="••••••••" required />
+                    <input type="text" value={managerPass} onChange={e => setManagerPass(e.target.value)} className="w-full p-5 pr-12 bg-slate-50 dark:bg-slate-700 border border-slate-100 dark:border-slate-600 rounded-2xl outline-none focus:border-primary font-bold text-left dark:text-white" placeholder="••••••••" required />
                   </div>
                 </div>
 
                 <button 
                   type="submit" 
                   disabled={loading}
-                  className="w-full py-6 bg-primary text-white rounded-2xl font-black hover:scale-[1.02] shadow-2xl shadow-primary/20 mt-4 transition-all active:scale-95 flex items-center justify-center gap-3"
+                  className="w-full py-6 bg-primary text-white rounded-2xl font-black hover:scale-[1.02] shadow-2xl mt-4 transition-all flex items-center justify-center gap-3"
                 >
                   {loading ? <Loader2 className="animate-spin" /> : 'تفعيل الفرع والمدير أونلاين'}
                 </button>
