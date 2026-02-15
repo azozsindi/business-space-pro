@@ -1,14 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { CalendarState, DayData, User, Task, Space, SystemSettings } from './types';
+import { supabase } from './supabaseClient'; // إضافة الربط السحابي
 import DayModal from './components/DayModal';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
 import SpaceManagement from './components/SpaceManagement';
 import Settings from './components/Settings';
 import ProfileSettings from './components/ProfileSettings';
-// استيراد مكون الإحصائيات الجديد
 import Stats from './components/Stats'; 
-// استيراد مكون سجل النشاطات الجديد
 import ActivityLog from './components/ActivityLog';
 
 import { 
@@ -18,7 +17,6 @@ import {
   Settings as SettingsIcon, ChevronDown, Save, UserCog, Palette, Languages, Sun, Moon, BarChart3
 } from 'lucide-react';
 
-// قاموس الترجمة
 const translations = {
   ar: {
     calendar: "التقويم التفاعلي",
@@ -34,7 +32,7 @@ const translations = {
     today: "اليوم",
     completed: "مكتملة",
     tasks: "مهام",
-    saving: "تم تأمين الحفظ",
+    saving: "تم تأمين الحفظ سحابياً",
     darkMode: "الوضع الداكن",
     lightMode: "الوضع المضيء"
   },
@@ -52,7 +50,7 @@ const translations = {
     today: "Today",
     completed: "Completed",
     tasks: "Tasks",
-    saving: "Changes Saved",
+    saving: "Cloud Saved",
     darkMode: "Dark Mode",
     lightMode: "Light Mode"
   }
@@ -116,10 +114,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('bs_users_data'); 
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [users, setUsers] = useState<User[]>([]); // سيتم جلبهم من السحابة
 
   const [settings, setSettings] = useState<SystemSettings>(() => {
     const saved = localStorage.getItem('bs_settings');
@@ -135,13 +130,36 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // وظيفة لتحديث قائمة المستخدمين من الـ LocalStorage فوراً (إصلاح مشكلة اليوزرات)
-  const refreshUsersList = () => {
-    const saved = localStorage.getItem('bs_users_data');
-    if (saved) {
-      setUsers(JSON.parse(saved));
+  // --- وظيفة جلب المستخدمين من Supabase (أونلاين) ---
+  const refreshUsersList = async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*');
+    
+    if (!error && data) {
+      const formattedUsers: User[] = data.map(u => ({
+        id: u.id,
+        username: u.username,
+        fullName: u.full_name,
+        role: u.role,
+        spaceId: u.space_id,
+        isActive: u.is_active,
+        password: u.password,
+        permissions: {
+          canManageUsers: ['admin', 'super-admin', 'manager'].includes(u.role),
+          canCreateSpaces: u.role === 'super-admin',
+          canViewAllReports: u.role !== 'employee'
+        }
+      }));
+      setUsers(formattedUsers);
+      localStorage.setItem('bs_users_data', JSON.stringify(formattedUsers));
     }
   };
+
+  // جلب البيانات عند تشغيل التطبيق
+  useEffect(() => {
+    refreshUsersList();
+  }, []);
 
   const t = translations[lang];
   const isSuperAdmin = user?.role === 'super-admin';
@@ -431,7 +449,7 @@ const App: React.FC = () => {
                       key={date.toISOString()}
                       onClick={() => setSelectedDate(date)}
                       className={`relative flex flex-col p-6 aspect-square rounded-[2.8rem] border-2 transition-all duration-500 overflow-hidden group 
-                        ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-primary/50' : 'bg-white border-slate-50 hover:border-primary/50'}
+                        ${darkMode ? 'bg-slate-800 border-slate-700 hover:border-primary/50' : 'bg-white border-slate-100 hover:border-primary/50'}
                         ${isMatch ? 'ring-4 ring-yellow-400 border-yellow-400 scale-105 z-20 shadow-2xl' : 'hover:-translate-y-2 hover:shadow-2xl'}`}
                     >
                       <span className={`text-3xl font-black mb-auto transition-colors ${darkMode ? 'text-slate-700 group-hover:text-white' : 'text-slate-200 group-hover:text-slate-900'}`}>{date.getDate()}</span>
