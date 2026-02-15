@@ -26,6 +26,7 @@ const translations = {
     activity: "سجل النشاطات",
     profile: "ملفي الشخصي",
     admin: "إدارة الفريق",
+    spaces: "إدارة المساحات",
     settings: "تخصيص النظام",
     logout: "تسجيل الخروج",
     search: "ابحث في المهام والملاحظات...",
@@ -43,6 +44,7 @@ const translations = {
     activity: "Activity Log",
     profile: "My Profile",
     admin: "Team Management",
+    spaces: "Space Management",
     settings: "System Settings",
     logout: "Logout",
     search: "Search tasks and notes...",
@@ -62,7 +64,7 @@ const roleInstructions: Record<string, { title: string, steps: string[], color: 
     steps: [
       "يمكنك مراقبة كافة مساحات العمل وتعديل إعداداتها البرمجية.",
       "لديك الصلاحية لتحديد عدد المستخدمين الأقصى لكل مساحة عمل.",
-      "يمكنك إضافة مدراء نظام (Admins) وتعيينهم في أي مساحة."
+      "يمكنك إضافة مدراء نظام (Admins) وتعيينهم in أي مساحة."
     ],
     color: "bg-rose-500"
   },
@@ -115,7 +117,7 @@ const App: React.FC = () => {
   });
 
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('bs_users_data'); // تأكد من الاسم المستخدم في Stats
+    const saved = localStorage.getItem('bs_users_data'); 
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -321,9 +323,14 @@ const App: React.FC = () => {
           )}
 
           {isSuperAdmin && (
-            <button onClick={() => setView('settings')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'settings' ? 'bg-primary text-white shadow-xl' : 'hover:bg-slate-800 hover:text-white'}`}>
-              <Palette size={20} /> {t.settings}
-            </button>
+            <>
+              <button onClick={() => setView('spaces')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'spaces' ? 'bg-primary text-white shadow-xl' : 'hover:bg-slate-800 hover:text-white'}`}>
+                <Building2 size={20} /> {t.spaces}
+              </button>
+              <button onClick={() => setView('settings')} className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-black transition-all ${view === 'settings' ? 'bg-primary text-white shadow-xl' : 'hover:bg-slate-800 hover:text-white'}`}>
+                <Palette size={20} /> {t.settings}
+              </button>
+            </>
           )}
         </nav>
 
@@ -438,18 +445,17 @@ const App: React.FC = () => {
             <ProfileSettings 
               user={user} 
               onUpdate={(updatedUser: User) => {
-                // تحديث حالة المستخدم الحالية
                 setUser(updatedUser);
-                // تحديث قائمة المستخدمين الكلية
                 const updatedUsersList = users.map(u => u.id === updatedUser.id ? updatedUser : u);
                 setUsers(updatedUsersList);
-                // حفظ البيانات في LocalStorage لضمان بقائها
                 localStorage.setItem('bs_session', JSON.stringify(updatedUser));
                 localStorage.setItem('bs_users_data', JSON.stringify(updatedUsersList));
               }} 
             />
           ) : view === 'admin' ? (
             <UserManagement currentUser={user} isSuperAdmin={isSuperAdmin} />
+          ) : view === 'spaces' && isSuperAdmin ? (
+            <SpaceManagement />
           ) : view === 'settings' && isSuperAdmin ? (
             <Settings settings={settings} onUpdate={setSettings} onSpacesUpdate={setSpaces} />
           ) : view === 'notifications' ? (
